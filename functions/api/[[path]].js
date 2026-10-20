@@ -69,6 +69,8 @@ async function route(ctx) {
 
   // 会员内容
   if (method === 'GET' && path === '/api/articles') return listArticles(ctx);
+  // 公开预告：只返回标题和摘要，正文永远不公开
+  if (method === 'GET' && path === '/api/public/articles') return publicArticles(ctx);
 
   // 管理后台
   if (method === 'GET' && path === '/api/admin/articles') return adminListArticles(ctx);
@@ -341,6 +343,24 @@ async function listArticles({ request, env }) {
       LIMIT 200`
   ).all();
   return json({ articles: results || [] });
+}
+
+/** 首页预告：任何人都能拿到标题和摘要，但拿不到正文 */
+async function publicArticles({ env }) {
+  const { results } = await env.DB.prepare(
+    `SELECT id, title, summary, created_at
+       FROM articles
+      WHERE published = 1
+      ORDER BY created_at DESC
+      LIMIT 6`
+  ).all();
+  const counted = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM articles WHERE published = 1'
+  ).first();
+  return json({
+    articles: results || [],
+    total: counted ? Number(counted.n) : 0,
+  });
 }
 
 async function getArticle({ request, env }, id) {

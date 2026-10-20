@@ -20,8 +20,11 @@
   <div class="container">
     <div class="row" style="margin-bottom:24px; align-items:flex-start">
       <div>
-        <h1 style="font-size:1.6rem; margin-bottom:4px">会员中心</h1>
-        <p class="muted small" id="welcome" style="margin:0">正在加载…</p>
+        <div class="row" style="gap:10px; align-items:center">
+          <h1 style="font-size:1.6rem; margin:0">会员中心</h1>
+          <span class="badge" id="count"></span>
+        </div>
+        <p class="muted small" id="welcome" style="margin:8px 0 0">正在加载…</p>
       </div>
       <span class="spacer"></span>
       <a class="btn btn-ghost btn-sm hidden" id="admin-entry" href="/admin">进入管理后台</a>
@@ -63,6 +66,7 @@
     try {
       const data = await API.get('/articles');
       const articles = data.articles || [];
+      document.getElementById('count').textContent = articles.length ? articles.length + ' 篇' : '';
 
       if (!articles.length) {
         list.innerHTML =

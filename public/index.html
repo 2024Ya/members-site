@@ -18,18 +18,58 @@
 </header>
 
 <section class="hero">
-  <div class="container">
-    <span class="badge badge-brand">会员制内容站</span>
-    <h1 style="margin-top:14px">专属内容，<br>只给会员看</h1>
-    <p class="lead">注册一个账号即可阅读全部会员专属文章和教程。内容由管理员在后台发布，随时更新。</p>
-    <div class="row" style="margin-top:26px">
-      <a class="btn btn-primary" href="/register" id="cta-main">免费注册</a>
-      <a class="btn btn-ghost" href="/login" id="cta-second">已有账号，直接登录</a>
+  <div class="hero-aurora" aria-hidden="true"></div>
+  <div class="container hero-inner">
+    <div class="hero-copy">
+      <span class="badge badge-brand">会员制内容站</span>
+      <h1>专属内容，<br><span class="grad">只给会员看</span></h1>
+      <p class="lead">注册一个账号即可阅读全部会员专属文章和教程。内容由管理员在后台发布，持续更新。</p>
+
+      <div class="row hero-actions">
+        <a class="btn btn-primary" href="/register" id="cta-main">免费注册</a>
+        <a class="btn btn-ghost" href="/login" id="cta-second">已有账号，直接登录</a>
+      </div>
+
+      <div class="hero-stats hidden" id="hero-stats">
+        <div>
+          <div class="n" id="stat-count">—</div>
+          <div class="l">篇会员内容</div>
+        </div>
+        <div>
+          <div class="n">0 元</div>
+          <div class="l">注册即可阅读</div>
+        </div>
+        <div>
+          <div class="n">100%</div>
+          <div class="l">无广告</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-art" aria-hidden="true">
+      <div class="ghost-card g1"></div>
+      <div class="ghost-card g2"></div>
+      <div class="ghost-card g3">
+        <div class="ghost-line w70"></div>
+        <div class="ghost-line w90"></div>
+        <div class="ghost-line w55"></div>
+        <div class="ghost-lock">🔒</div>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="section" style="padding-top:8px">
+<section class="section hidden" id="latest">
+  <div class="container">
+    <div class="section-head">
+      <h2>最新更新</h2>
+      <p class="muted small">标题和摘要公开，正文仅对会员开放</p>
+    </div>
+    <div class="article-grid" id="latest-grid"></div>
+  </div>
+</section>
+
+<section class="section">
   <div class="container">
     <div class="features">
       <div class="feature">
@@ -44,8 +84,8 @@
       </div>
       <div class="feature">
         <div class="icon">⚙️</div>
-        <h3>自带管理后台</h3>
-        <p>在后台发布、修改、下架文章，管理注册用户，全程不用改代码。</p>
+        <h3>持续更新</h3>
+        <p>内容由管理员在后台发布，新文章发布后会员刷新即可阅读。</p>
       </div>
     </div>
   </div>
@@ -53,8 +93,10 @@
 
 <section class="section">
   <div class="container">
-    <h2>三步开始</h2>
-    <div class="features" style="margin-top:18px">
+    <div class="section-head">
+      <h2>三步开始</h2>
+    </div>
+    <div class="features">
       <div class="feature">
         <h3>1. 注册账号</h3>
         <p>填写昵称、邮箱和密码，十秒钟完成注册。</p>
@@ -64,8 +106,8 @@
         <p>登录后进入会员中心，看到全部已发布的文章和教程。</p>
       </div>
       <div class="feature">
-        <h3>3. 管理员更新</h3>
-        <p>管理员在后台写新文章，会员刷新页面即可看到。</p>
+        <h3>3. 持续跟进</h3>
+        <p>新内容发布后直接出现在会员中心，不需要另外订阅。</p>
       </div>
     </div>
   </div>
@@ -84,6 +126,7 @@
 <script>
   (async function () {
     const user = await UI.mountNav();
+
     if (user) {
       const main = document.getElementById('cta-main');
       const second = document.getElementById('cta-second');
@@ -91,6 +134,37 @@
       main.setAttribute('href', '/app');
       second.textContent = user.role === 'admin' ? '管理后台' : '我的账号';
       second.setAttribute('href', user.role === 'admin' ? '/admin' : '/app');
+    }
+
+    // 最新更新：只拿标题和摘要，没登录也能看到
+    try {
+      const data = await API.get('/public/articles');
+      const list = data.articles || [];
+      if (!list.length) return;
+
+      document.getElementById('latest').classList.remove('hidden');
+      document.getElementById('hero-stats').classList.remove('hidden');
+      document.getElementById('stat-count').textContent = data.total || list.length;
+
+      document.getElementById('latest-grid').innerHTML = list.map(function (a) {
+        const href = user
+          ? '/article?id=' + encodeURIComponent(a.id)
+          : '/login?next=' + encodeURIComponent('/article?id=' + a.id);
+        const lock = user ? '' : '<span class="lock-icon" title="登录后可读全文">🔒</span>';
+        return (
+          '<a class="article-card" href="' + href + '">' +
+            '<div class="card-top">' +
+              '<span class="badge badge-brand">会员专享</span>' +
+              lock +
+            '</div>' +
+            '<h3>' + UI.escapeHtml(a.title) + '</h3>' +
+            (a.summary ? '<p>' + UI.escapeHtml(a.summary) + '</p>' : '<p></p>') +
+            '<div class="article-meta"><span>' + UI.formatDate(a.created_at) + '</span></div>' +
+          '</a>'
+        );
+      }).join('');
+    } catch (err) {
+      /* 没有内容或接口还没就绪时，静默隐藏这一块 */
     }
   })();
 </script>
