@@ -1,12 +1,8 @@
-# Cloudflare Pages 项目配置
-# 说明：D1 数据库的「绑定」建议在 Cloudflare 网站后台点击添加（变量名必须叫 DB），
-#      这样不需要把 database_id 写进文件，避免改错。
 name = "members-site"
 compatibility_date = "2025-09-01"
 pages_build_output_dir = "public"
 
-# 本地预览时如果也想用 D1，取消下面 4 行注释并填入你真实创建的 database_id
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "members-db"
-# database_id = "在这里填你的数据库ID"
+[[d1_databases]]
+binding = "DB"
+database_name = "members-db"
+database_id = "c6eff260-17bd-47b0-b60f-1b5295424323"
