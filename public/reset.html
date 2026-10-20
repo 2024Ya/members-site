@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>设置新密码 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container container-narrow">
+    <div class="card">
+      <h1 style="font-size:1.5rem">设置新密码</h1>
+      <p class="muted small" style="margin-bottom:22px">设置完成后，其他设备上的登录状态会全部失效</p>
+
+      <div id="alert" class="alert alert-error hidden"></div>
+
+      <form id="reset-form" novalidate>
+        <div class="field">
+          <label for="password">新密码</label>
+          <input class="input" type="password" id="password" autocomplete="new-password" placeholder="至少 8 位" required>
+        </div>
+        <div class="field">
+          <label for="password2">确认新密码</label>
+          <input class="input" type="password" id="password2" autocomplete="new-password" placeholder="再输入一次" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submit-btn">保存新密码</button>
+      </form>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container center"><span data-site-name>会员站</span></div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+  (async function () {
+    await UI.mountNav();
+
+    const token = new URLSearchParams(location.search).get('token') || '';
+    const form = document.getElementById('reset-form');
+    const btn = document.getElementById('submit-btn');
+
+    if (!token) {
+      UI.showAlert('alert', '这个链接不完整，请重新点击邮件里的链接');
+      btn.disabled = true;
+      return;
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      UI.hideAlert('alert');
+
+      const password = document.getElementById('password').value;
+      const password2 = document.getElementById('password2').value;
+      if (password.length < 8) return UI.showAlert('alert', '密码至少需要 8 位');
+      if (password !== password2) return UI.showAlert('alert', '两次输入的密码不一致');
+
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+      try {
+        await API.post('/auth/reset', { token: token, password: password });
+        location.href = '/login?reset=1';
+      } catch (err) {
+        UI.showAlert('alert', err.message);
+        btn.disabled = false;
+        btn.textContent = '保存新密码';
+      }
+    });
+  })();
+</script>
+</body>
+</html>

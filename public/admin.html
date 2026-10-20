@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理后台 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container">
+    <div id="deny" class="empty hidden" style="margin-top:20px">
+      <div class="big">🔒</div>
+      <p style="margin:0 0 6px" id="deny-text">这个页面只有管理员能进</p>
+      <p class="small" style="margin:0"><a href="/app">回会员中心</a></p>
+    </div>
+
+    <div id="panel" class="hidden">
+      <h1 style="font-size:1.6rem">管理后台</h1>
+      <p class="muted small" style="margin-bottom:22px">在这里发布会员内容、管理注册用户</p>
+
+      <div class="stats" style="margin-bottom:28px">
+        <div class="stat"><div class="n" id="stat-users">–</div><div class="l">注册用户</div></div>
+        <div class="stat"><div class="n" id="stat-new">–</div><div class="l">近 7 天新增</div></div>
+        <div class="stat"><div class="n" id="stat-articles">–</div><div class="l">文章总数</div></div>
+        <div class="stat"><div class="n" id="stat-published">–</div><div class="l">已发布</div></div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="articles" type="button">文章管理</button>
+        <button class="tab" data-tab="users" type="button">用户管理</button>
+      </div>
+
+      <!-- 文章 -->
+      <section id="tab-articles">
+        <div class="row" style="margin-bottom:16px">
+          <button class="btn btn-primary" id="new-article" type="button">+ 新建文章</button>
+          <span class="spacer"></span>
+          <span class="small muted">草稿只有你能看到，发布后会员才能阅读</span>
+        </div>
+
+        <div class="card hidden" id="editor" style="margin-bottom:18px">
+          <h2 id="editor-title" style="font-size:1.1rem">新建文章</h2>
+          <form id="article-form" novalidate>
+            <div class="field">
+              <label for="a-title">标题</label>
+              <input class="input" id="a-title" maxlength="120" placeholder="例如：新手入门第一课">
+            </div>
+            <div class="field">
+              <label for="a-summary">摘要（列表页显示）</label>
+              <input class="input" id="a-summary" maxlength="300" placeholder="一句话说明这篇文章讲什么">
+            </div>
+            <div class="field">
+              <label for="a-content">正文</label>
+              <textarea class="textarea" id="a-content" placeholder="支持 Markdown：# 标题、**加粗**、- 列表、`代码`、> 引用、[文字](链接)"></textarea>
+              <div class="hint">空行分段；三个反引号包起来是代码块。</div>
+            </div>
+            <div class="field">
+              <label style="display:flex; align-items:center; gap:8px; font-weight:500">
+                <input type="checkbox" id="a-published" style="width:16px;height:16px">
+                立即发布（不勾选则存为草稿）
+              </label>
+            </div>
+            <div class="row">
+              <button class="btn btn-primary" type="submit" id="save-article">保存</button>
+              <button class="btn btn-ghost" type="button" id="cancel-edit">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card card-tight">
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr><th>标题</th><th>状态</th><th>更新时间</th><th style="width:150px">操作</th></tr>
+              </thead>
+              <tbody id="article-rows">
+                <tr><td colspan="4" class="muted">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 用户 -->
+      <section id="tab-users" class="hidden">
+        <div class="card card-tight">
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr><th>邮箱</th><th>昵称</th><th>身份</th><th>状态</th><th>注册时间</th><th style="width:260px">操作</th></tr>
+              </thead>
+              <tbody id="user-rows">
+                <tr><td colspan="6" class="muted">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container center"><span data-site-name>会员站</span></div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+  (async function () {
+    await UI.mountNav();
+
+    const user = await UI.requireLogin();
+    if (!user) return;
+
+    const deny = document.getElementById('deny');
+    if (user.role !== 'admin') {
+      document.getElementById('deny-text').textContent =
+        '当前账号（' + user.email + '）不是管理员，进不了这个页面。';
+      deny.classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('panel').classList.remove('hidden');
+
+    let articles = [];
+    let editingId = null;
+
+    // ---------------- Tab 切换 ----------------
+    document.querySelectorAll('.tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        const name = tab.dataset.tab;
+        document.getElementById('tab-articles').classList.toggle('hidden', name !== 'articles');
+        document.getElementById('tab-users').classList.toggle('hidden', name !== 'users');
+      });
+    });
+
+    // ---------------- 概览 ----------------
+    async function loadOverview() {
+      try {
+        const s = await API.get('/admin/overview');
+        document.getElementById('stat-users').textContent = s.users;
+        document.getElementById('stat-new').textContent = s.newUsers7d;
+        document.getElementById('stat-articles').textContent = s.articles;
+        document.getElementById('stat-published').textContent = s.published;
+      } catch (err) {
+        UI.toast('概览加载失败：' + err.message, 'err');
+      }
+    }
+
+    // ---------------- 文章 ----------------
+    async function loadArticles() {
+      const tbody = document.getElementById('article-rows');
+      try {
+        const data = await API.get('/admin/articles');
+        articles = data.articles || [];
+        if (!articles.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="muted">还没有文章，点上面的「新建文章」开始写吧</td></tr>';
+          return;
+        }
+        tbody.innerHTML = articles.map(function (a) {
+          return (
+            '<tr>' +
+              '<td><strong>' + UI.escapeHtml(a.title) + '</strong></td>' +
+              '<td>' + (a.published
+                ? '<span class="badge badge-ok">已发布</span>'
+                : '<span class="badge badge-warn">草稿</span>') + '</td>' +
+              '<td class="muted small">' + UI.formatDate(a.updated_at) + '</td>' +
+              '<td>' +
+                '<button class="btn btn-ghost btn-sm" data-action="edit" data-id="' + a.id + '">编辑</button> ' +
+                '<button class="btn btn-danger btn-sm" data-action="delete" data-id="' + a.id + '">删除</button>' +
+              '</td>' +
+            '</tr>'
+          );
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    document.getElementById('article-rows').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+
+      if (action === 'edit') {
+        const a = articles.find((x) => x.id === id);
+        if (!a) return;
+        try {
+          const data = await API.get('/articles/' + encodeURIComponent(id));
+          openEditor(data.article);
+        } catch (err) {
+          UI.toast(err.message, 'err');
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (!confirm('确定删除这篇文章吗？删除后无法恢复。')) return;
+        try {
+          await API.del('/admin/articles/' + encodeURIComponent(id));
+          UI.toast('已删除', 'ok');
+          closeEditor();
+          await loadArticles();
+          await loadOverview();
+        } catch (err) {
+          UI.toast(err.message, 'err');
+        }
+      }
+    });
+
+    function openEditor(article) {
+      editingId = article ? article.id : null;
+      document.getElementById('editor-title').textContent = article ? '编辑文章' : '新建文章';
+      document.getElementById('a-title').value = article ? article.title : '';
+      document.getElementById('a-summary').value = article ? article.summary : '';
+      document.getElementById('a-content').value = article ? article.content : '';
+      document.getElementById('a-published').checked = article ? Boolean(article.published) : true;
+      document.getElementById('editor').classList.remove('hidden');
+      document.getElementById('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function closeEditor() {
+      editingId = null;
+      document.getElementById('editor').classList.add('hidden');
+      document.getElementById('article-form').reset();
+    }
+
+    document.getElementById('new-article').addEventListener('click', function () { openEditor(null); });
+    document.getElementById('cancel-edit').addEventListener('click', closeEditor);
+
+    document.getElementById('article-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById('save-article');
+      const payload = {
+        title: document.getElementById('a-title').value.trim(),
+        summary: document.getElementById('a-summary').value.trim(),
+        content: document.getElementById('a-content').value,
+        published: document.getElementById('a-published').checked,
+      };
+
+      if (!payload.title) return UI.toast('标题不能为空', 'err');
+
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+      try {
+        if (editingId) {
+          await API.patch('/admin/articles/' + encodeURIComponent(editingId), payload);
+          UI.toast('已保存', 'ok');
+        } else {
+          const res = await API.post('/admin/articles', payload);
+          UI.toast(payload.published ? '已发布' : '已存为草稿', 'ok');
+          if (res && res.id) editingId = res.id;
+        }
+        closeEditor();
+        await loadArticles();
+        await loadOverview();
+      } catch (err) {
+        UI.toast(err.message, 'err');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '保存';
+      }
+    });
+
+    // ---------------- 用户 ----------------
+    async function loadUsers() {
+      const tbody = document.getElementById('user-rows');
+      try {
+        const data = await API.get('/admin/users');
+        const list = data.users || [];
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted">还没有用户</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map(function (u) {
+          const badges =
+            (u.role === 'admin' ? '<span class="badge badge-brand">管理员</span> ' : '<span class="badge">会员</span> ') +
+            (u.banned ? '<span class="badge badge-danger">已停用</span> ' : '') +
+            (u.verified ? '' : '<span class="badge badge-warn">未验证</span>');
+          const isSelf = u.id === user.id;
+          return (
+            '<tr>' +
+              '<td class="small">' + UI.escapeHtml(u.email) + (isSelf ? ' <span class="muted">(你)</span>' : '') + '</td>' +
+              '<td class="small">' + UI.escapeHtml(u.name || '') + '</td>' +
+              '<td>' + badges + '</td>' +
+              '<td class="small">' + (u.banned ? '已停用' : '正常') + '</td>' +
+              '<td class="muted small">' + UI.formatDate(u.created_at) + '</td>' +
+              '<td>' +
+                '<button class="btn btn-ghost btn-sm" data-action="ban" data-id="' + u.id + '" ' + (isSelf ? 'disabled' : '') + '>' +
+                  (u.banned ? '解封' : '停用') + '</button> ' +
+                '<button class="btn btn-ghost btn-sm" data-action="role" data-id="' + u.id + '" ' + (isSelf ? 'disabled' : '') + '>' +
+                  (u.role === 'admin' ? '取消管理员' : '设为管理员') + '</button> ' +
+                '<button class="btn btn-ghost btn-sm" data-action="reset" data-id="' + u.id + '">改密码</button>' +
+              '</td>' +
+            '</tr>'
+          );
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    document.getElementById('user-rows').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+
+      try {
+        if (action === 'ban') {
+          const row = await API.get('/admin/users');
+          const target = (row.users || []).find((u) => u.id === id);
+          if (!target) return;
+          if (!confirm((target.banned ? '解封 ' : '停用 ') + target.email + ' ？')) return;
+          await API.patch('/admin/users/' + encodeURIComponent(id), { banned: !target.banned });
+          UI.toast(target.banned ? '已解封' : '已停用', 'ok');
+        }
+
+        if (action === 'role') {
+          const row = await API.get('/admin/users');
+          const target = (row.users || []).find((u) => u.id === id);
+          if (!target) return;
+          const next = target.role === 'admin' ? 'user' : 'admin';
+          if (!confirm('把 ' + target.email + ' 设为' + (next === 'admin' ? '管理员' : '普通会员') + '？')) return;
+          await API.patch('/admin/users/' + encodeURIComponent(id), { role: next });
+          UI.toast('已更新', 'ok');
+        }
+
+        if (action === 'reset') {
+          const pwd = prompt('给这个用户设置一个新密码（至少 8 位）：');
+          if (!pwd) return;
+          if (pwd.length < 8) return UI.toast('密码至少 8 位', 'err');
+          await API.patch('/admin/users/' + encodeURIComponent(id), { newPassword: pwd });
+          UI.toast('密码已重置，请把新密码告诉对方', 'ok');
+        }
+
+        await loadUsers();
+        await loadOverview();
+      } catch (err) {
+        UI.toast(err.message, 'err');
+      }
+    });
+
+    // ---------------- 启动 ----------------
+    await loadOverview();
+    await loadArticles();
+    await loadUsers();
+  })();
+</script>
+</body>
+</html>

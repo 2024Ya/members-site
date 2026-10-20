@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>会员站 · 会员专属文章与教程</title>
+  <meta name="description" content="注册成为会员，阅读全部专属文章与教程。">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <span class="badge badge-brand">会员制内容站</span>
+    <h1 style="margin-top:14px">专属内容，<br>只给会员看</h1>
+    <p class="lead">注册一个账号即可阅读全部会员专属文章和教程。内容由管理员在后台发布，随时更新。</p>
+    <div class="row" style="margin-top:26px">
+      <a class="btn btn-primary" href="/register" id="cta-main">免费注册</a>
+      <a class="btn btn-ghost" href="/login" id="cta-second">已有账号，直接登录</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:8px">
+  <div class="container">
+    <div class="features">
+      <div class="feature">
+        <div class="icon">🔒</div>
+        <h3>内容不公开</h3>
+        <p>文章只对登录会员开放，未登录访问时会自动引导到登录页。</p>
+      </div>
+      <div class="feature">
+        <div class="icon">👤</div>
+        <h3>账号安全</h3>
+        <p>密码加盐哈希存储，服务端不保存明文；连续输错会自动锁定一段时间。</p>
+      </div>
+      <div class="feature">
+        <div class="icon">⚙️</div>
+        <h3>自带管理后台</h3>
+        <p>在后台发布、修改、下架文章，管理注册用户，全程不用改代码。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2>三步开始</h2>
+    <div class="features" style="margin-top:18px">
+      <div class="feature">
+        <h3>1. 注册账号</h3>
+        <p>填写昵称、邮箱和密码，十秒钟完成注册。</p>
+      </div>
+      <div class="feature">
+        <h3>2. 阅读内容</h3>
+        <p>登录后进入会员中心，看到全部已发布的文章和教程。</p>
+      </div>
+      <div class="feature">
+        <h3>3. 管理员更新</h3>
+        <p>管理员在后台写新文章，会员刷新页面即可看到。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container row">
+    <span data-site-name>会员站</span>
+    <span class="spacer"></span>
+    <span>由 Cloudflare 免费托管</span>
+  </div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+  (async function () {
+    const user = await UI.mountNav();
+    if (user) {
+      const main = document.getElementById('cta-main');
+      const second = document.getElementById('cta-second');
+      main.textContent = '进入会员中心';
+      main.setAttribute('href', '/app');
+      second.textContent = user.role === 'admin' ? '管理后台' : '我的账号';
+      second.setAttribute('href', user.role === 'admin' ? '/admin' : '/app');
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>会员中心 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container">
+    <div class="row" style="margin-bottom:24px; align-items:flex-start">
+      <div>
+        <h1 style="font-size:1.6rem; margin-bottom:4px">会员中心</h1>
+        <p class="muted small" id="welcome" style="margin:0">正在加载…</p>
+      </div>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm hidden" id="admin-entry" href="/admin">进入管理后台</a>
+    </div>
+
+    <div id="list" class="article-grid">
+      <div class="empty" style="grid-column:1/-1">正在加载文章…</div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container row">
+    <span data-site-name>会员站</span>
+    <span class="spacer"></span>
+    <span id="footer-user"></span>
+  </div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+  (async function () {
+    await UI.mountNav();
+
+    const user = await UI.requireLogin();
+    if (!user) return;
+
+    document.getElementById('welcome').textContent =
+      '你好，' + (user.name || user.email) + '。这里的全部内容都可以阅读。';
+    document.getElementById('footer-user').textContent = user.email;
+
+    if (user.role === 'admin') {
+      document.getElementById('admin-entry').classList.remove('hidden');
+    }
+
+    const list = document.getElementById('list');
+
+    try {
+      const data = await API.get('/articles');
+      const articles = data.articles || [];
+
+      if (!articles.length) {
+        list.innerHTML =
+          '<div class="empty" style="grid-column:1/-1">' +
+            '<div class="big">📄</div>' +
+            '<p style="margin:0 0 6px">还没有已发布的文章</p>' +
+            '<p class="small" style="margin:0">' +
+              (user.role === 'admin'
+                ? '你是管理员，去 <a href="/admin">管理后台</a> 发布第一篇吧。'
+                : '管理员还没有发布内容，过几天再来看看。') +
+            '</p>' +
+          '</div>';
+        return;
+      }
+
+      list.innerHTML = articles.map(function (a) {
+        return (
+          '<a class="article-card" href="/article?id=' + encodeURIComponent(a.id) + '">' +
+            '<h3>' + UI.escapeHtml(a.title) + '</h3>' +
+            (a.summary ? '<p>' + UI.escapeHtml(a.summary) + '</p>' : '<p style="margin-bottom:12px"></p>') +
+            '<div class="article-meta">' +
+              '<span>' + UI.formatDate(a.created_at) + '</span>' +
+              '<span class="badge badge-brand">会员专享</span>' +
+            '</div>' +
+          '</a>'
+        );
+      }).join('');
+    } catch (err) {
+      list.innerHTML = '<div class="empty" style="grid-column:1/-1">加载失败：' + UI.escapeHtml(err.message) + '</div>';
+    }
+  })();
+</script>
+</body>
+</html>

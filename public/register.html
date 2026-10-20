@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>注册 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container container-narrow">
+    <div class="card">
+      <h1 style="font-size:1.5rem">免费注册</h1>
+      <p class="muted small" style="margin-bottom:22px">注册后即可阅读全部会员专属内容</p>
+
+      <div id="alert" class="alert alert-error hidden"></div>
+
+      <form id="register-form" novalidate>
+        <div class="field">
+          <label for="name">昵称</label>
+          <input class="input" type="text" id="name" name="name" maxlength="40" autocomplete="nickname" placeholder="怎么称呼你（可不填）">
+        </div>
+        <div class="field">
+          <label for="email">邮箱</label>
+          <input class="input" type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+          <div class="hint">用于登录和找回密码</div>
+        </div>
+        <div class="field">
+          <label for="password">密码</label>
+          <input class="input" type="password" id="password" name="password" autocomplete="new-password" placeholder="至少 8 位" required>
+        </div>
+        <div class="field">
+          <label for="password2">确认密码</label>
+          <input class="input" type="password" id="password2" name="password2" autocomplete="new-password" placeholder="再输入一次" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submit-btn">创建账号</button>
+      </form>
+
+      <p class="small muted" style="margin:18px 0 0; text-align:center">
+        已经有账号了？<a href="/login">直接登录</a>
+      </p>
+    </div>
+
+    <p class="small muted center" style="margin-top:16px">
+      密码会加盐哈希后存储，管理员也看不到你的原始密码。
+    </p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container center"><span data-site-name>会员站</span></div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+  (async function () {
+    const user = await UI.mountNav();
+    if (user) {
+      location.replace(UI.safeNext('/app'));
+      return;
+    }
+
+    const form = document.getElementById('register-form');
+    const btn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      UI.hideAlert('alert');
+
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const password2 = document.getElementById('password2').value;
+
+      if (!email) return UI.showAlert('alert', '请填写邮箱');
+      if (password.length < 8) return UI.showAlert('alert', '密码至少需要 8 位');
+      if (password !== password2) return UI.showAlert('alert', '两次输入的密码不一致');
+
+      btn.disabled = true;
+      btn.textContent = '创建中…';
+      try {
+        const data = await API.post('/auth/register', { name: name, email: email, password: password });
+        if (data.message && data.message.indexOf('验证') !== -1) {
+          UI.showAlert('alert', data.message, 'ok');
+          btn.textContent = '请查收邮件';
+          setTimeout(function () { location.href = UI.safeNext('/app'); }, 1800);
+        } else {
+          location.href = UI.safeNext('/app');
+        }
+      } catch (err) {
+        UI.showAlert('alert', err.message);
+        btn.disabled = false;
+        btn.textContent = '创建账号';
+      }
+    });
+  })();
+</script>
+</body>
+</html>

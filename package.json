@@ -1,0 +1,10 @@
+{
+  "name": "members-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "会员制内容站：会员专属文章 + 管理后台，运行在 Cloudflare Pages + Workers + D1 上",
+  "scripts": {
+    "dev": "npx wrangler pages dev public",
+    "deploy": "npx wrangler pages deploy public"
+  }
+}
