@@ -1,5 +1,5 @@
 # Cloudflare Pages 项目配置
-# 注意：这个文件在，Cloudflare 后台的「绑定」就会被锁定，只能改这里
+# 注意：这个文件存在时，后台的「绑定」会被锁定，绑定只能改这里
 name = "members-site"
 compatibility_date = "2025-09-01"
 pages_build_output_dir = "public"
@@ -10,15 +10,7 @@ binding = "DB"
 database_name = "members-db"
 database_id = "c6eff260-17bd-47b0-b60f-1b5295424323"
 
-# 文件存储（可选）：用来放规范 PDF
-# 开通方式：Cloudflare 后台 → R2 → 创建存储桶，名字填 spec-files
-# 建好之后把下面 3 行的 # 去掉，提交即可生效
-# [[r2_buckets]]
-# binding = "FILES"
-# bucket_name = "spec-files"
-
-# 如果不想开通 R2（需要绑卡），可以用 Workers KV 顶替（免费 1GB）：
-# 后台 → Workers KV → 创建命名空间，名字填 spec-files-kv，然后换成下面 3 行
-# [[kv_namespaces]]
-# binding = "FILES_KV"
-# id = "填你的命名空间 ID"
+# 文件存储：Workers KV（免费 1GB，单文件上限 25MB）
+[[kv_namespaces]]
+binding = "FILES_KV"
+id = "2b5b8efb902e49f99c044e89bf6c62b7"

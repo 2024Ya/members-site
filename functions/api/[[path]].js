@@ -877,7 +877,12 @@ async function storeUpload(env, file) {
   const ext = (name.split('.').pop() || '').toLowerCase();
   const contentType = ALLOWED_FILE_TYPES[ext];
   if (!contentType) throw new ApiError(400, '只支持 PDF、Word、Excel、ZIP 文件');
-  if (file.size > MAX_FILE_BYTES) throw new ApiError(413, '单个文件不能超过 40 MB');
+
+  // KV 单值上限 25 MB，R2 没有这个限制
+  const limitMb = env.FILES ? 40 : 24;
+  if (file.size > limitMb * 1024 * 1024) {
+    throw new ApiError(413, `单个文件不能超过 ${limitMb} MB，请先压缩或拆分`);
+  }
 
   const key = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
   const buffer = await file.arrayBuffer();
