@@ -23,6 +23,7 @@ import {
   isEmail,
   assertSameOrigin,
 } from '../_lib/http.js';
+import { parseSpecFilename } from '../_lib/spec-filename.js';
 
 const SESSION_DAYS = 30;
 const MAX_FAILED = 5;
@@ -1018,21 +1019,6 @@ async function adminDeleteSpec({ request, env }, id) {
   return json({ ok: true });
 }
 
-/** 从文件名里拆出编号，例如「SL 274-2020 碾压式土石坝设计规范.pdf」 */
-function parseSpecFilename(filename) {
-  const base = String(filename).replace(/\.[^.]+$/, '').trim();
-  const matched = base.match(
-    /^([A-Za-z]{1,6}(?:\s*\/\s*[A-Za-z]{1,6})?\s*\d+(?:\.\d+)?\s*[-—–]\s*\d{2,4})\s*[_\-\s、]+\s*(.+)$/
-  );
-  if (matched) {
-    return {
-      code: matched[1].replace(/\s+/g, ' ').replace(/\s*\/\s*/g, '/').trim(),
-      title: matched[2].trim(),
-    };
-  }
-  return { code: '', title: base };
-}
-
 /** 批量上传：文件名即元数据，先全部建成记录，之后逐个补分类和版本 */
 async function adminBulkUpload({ request, env }) {
   await requireAdmin(env, request);
@@ -1059,11 +1045,11 @@ async function adminBulkUpload({ request, env }) {
            (id, code, title, category_id, standard_type, version, effective_date,
             status, summary, content, file_key, file_name, file_size, file_type,
             published, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '', '', '', 'active', '', '', ?, ?, ?, ?, 1, ?, ?)`
+         VALUES (?, ?, ?, ?, '', '', '', ?, '', '', ?, ?, ?, ?, 1, ?, ?)`
       )
-        .bind(id, parsed.code, parsed.title, categoryId, meta.key, meta.name, meta.size, meta.type, now, now)
+        .bind(id, parsed.code, parsed.title, categoryId, parsed.status, meta.key, meta.name, meta.size, meta.type, now, now)
         .run();
-      created.push({ id, code: parsed.code, title: parsed.title });
+      created.push({ id, code: parsed.code, title: parsed.title, status: parsed.status });
     } catch (err) {
       failed.push({ name: file.name, error: err instanceof ApiError ? err.message : '处理失败' });
     }
