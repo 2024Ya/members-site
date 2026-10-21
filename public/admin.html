@@ -252,6 +252,36 @@
   <div class="container center"><span data-site-name>个人规范库</span></div>
 </footer>
 
+<div id="dup-modal" class="modal-mask hidden">
+  <div class="modal">
+    <h3>发现相似规范</h3>
+    <p class="small muted" id="dup-file" style="margin:0 0 4px"></p>
+
+    <div class="dup-grid">
+      <div class="dup-col">
+        <div class="dup-label">正在上传</div>
+        <div class="dup-title" id="dup-in-title"></div>
+        <div class="dup-code" id="dup-in-code"></div>
+      </div>
+      <div class="dup-col existing">
+        <div class="dup-label">库里已有</div>
+        <div class="dup-title" id="dup-ex-title"></div>
+        <div class="dup-code" id="dup-ex-code"></div>
+        <div class="dup-status" id="dup-ex-status"></div>
+      </div>
+    </div>
+
+    <p class="small" id="dup-reason" style="margin:0 0 18px"></p>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" data-dup="skip-all" type="button">剩下的都跳过</button>
+      <button class="btn btn-ghost btn-sm" data-dup="skip" type="button">跳过这一条</button>
+      <button class="btn btn-ghost btn-sm" data-dup="force-all" type="button">剩下的都上传</button>
+      <button class="btn btn-primary btn-sm" data-dup="force" type="button">仍然上传</button>
+    </div>
+  </div>
+</div>
+
 <script src="/assets/config.js"></script>
 <script src="/assets/common.js"></script>
 <script src="/assets/specs.js"></script>
@@ -443,12 +473,31 @@
         const url = editingId
           ? '/api/admin/specs/' + encodeURIComponent(editingId)
           : '/api/admin/specs';
-        const res = await fetch(url, {
+        let res = await fetch(url, {
           method: editingId ? 'PATCH' : 'POST',
           body: form,
           credentials: 'same-origin',
         });
-        const data = await res.json().catch(() => ({}));
+        let data = await res.json().catch(() => ({}));
+
+        if (res.status === 409 && data.similar) {
+          const decision = await showDuplicateDialog({
+            fileName: file ? file.name : '',
+            parsed: { title: title, code: document.getElementById('f-code').value.trim() },
+            match: data.similar,
+          });
+          if (decision !== 'force' && decision !== 'force-all') {
+            throw new Error('已跳过，没有保存');
+          }
+          form.append('force', '1');
+          res = await fetch(url, {
+            method: editingId ? 'PATCH' : 'POST',
+            body: form,
+            credentials: 'same-origin',
+          });
+          data = await res.json().catch(() => ({}));
+        }
+
         if (!res.ok) throw new Error(data.error || '保存失败');
 
         UI.toast(editingId ? '已保存' : '已创建', 'ok');
@@ -511,15 +560,54 @@
         if (!res.ok) throw new Error(data.error || '上传失败');
 
         const failed = data.failed || [];
-        document.getElementById('bulk-result').innerHTML =
-          '<div class="alert ' + (failed.length ? 'alert-info' : 'alert-ok') + '">' +
-            '成功上传 <strong>' + data.created + '</strong> 个' +
-            (failed.length
-              ? '，失败 ' + failed.length + ' 个：' +
-                failed.map((f) => UI.escapeHtml(f.name + '（' + f.error + '）')).join('、')
-              : '') +
-          '</div>' +
-          '<p class="small muted">接下来到「规范列表」里逐条补上分类、版本和状态。</p>';
+        const conflicts = data.conflicts || [];
+        let created = data.created || 0;
+        let forced = 0;
+        let skippedCount = 0;
+        let forceAll = false;
+        let skipAll = false;
+
+        for (const c of conflicts) {
+          let decision;
+          if (forceAll) decision = 'force';
+          else if (skipAll) decision = 'skip';
+          else {
+            decision = await showDuplicateDialog({
+              fileName: c.name, parsed: c.parsed, match: c.match,
+            });
+            if (decision === 'force-all') { forceAll = true; decision = 'force'; }
+            if (decision === 'skip-all') { skipAll = true; decision = 'skip'; }
+          }
+
+          if (decision === 'force') {
+            try {
+              await forceUploadFile(pendingFiles[c.fileIndex], c.parsed, category);
+              forced += 1;
+            } catch (err) {
+              failed.push({ name: c.name, error: err.message });
+            }
+          } else {
+            skippedCount += 1;
+          }
+        }
+
+        let html = '<div class="alert ' + (failed.length ? 'alert-error' : 'alert-ok') + '">' +
+          '新建 <strong>' + created + '</strong> 个' +
+          (forced ? '，确认后上传 <strong>' + forced + '</strong> 个' : '') +
+          (skippedCount ? '，跳过 <strong>' + skippedCount + '</strong> 个' : '') +
+          (failed.length ? '，失败 ' + failed.length + ' 个' : '') +
+          '</div>';
+
+        if (failed.length) {
+          html += '<div class="alert alert-error"><strong>失败的文件</strong><br>' +
+            failed.map(function (f) {
+              return '· ' + UI.escapeHtml(f.name) + ' —— ' + UI.escapeHtml(f.error);
+            }).join('<br>') +
+            '</div>';
+        }
+
+        html += '<p class="small muted">接下来到「规范列表」里逐条补上分类、版本和状态。</p>';
+        document.getElementById('bulk-result').innerHTML = html;
 
         setFiles([]);
         fileInput.value = '';
@@ -532,6 +620,53 @@
         document.getElementById('bulk-progress').textContent = '';
       }
     });
+
+
+    // ---------------- 相似提醒弹窗 ----------------
+    function showDuplicateDialog(info) {
+      return new Promise(function (resolve) {
+        const mask = document.getElementById('dup-modal');
+        document.getElementById('dup-file').textContent = info.fileName ? '文件：' + info.fileName : '';
+        document.getElementById('dup-in-title').textContent = info.parsed.title || '（未识别到名称）';
+        document.getElementById('dup-in-code').textContent = info.parsed.code || '无编号';
+        document.getElementById('dup-ex-title').textContent = info.match.title || '（无名称）';
+        document.getElementById('dup-ex-code').textContent = info.match.code || '无编号';
+
+        const st = Specs.statusOf(info.match.status);
+        document.getElementById('dup-ex-status').innerHTML =
+          '<span class="badge ' + st[1] + '">' + st[0] + '</span>';
+        document.getElementById('dup-reason').textContent = '相似原因：' + info.match.reason;
+
+        mask.classList.remove('hidden');
+
+        function onClick(e) {
+          const btn = e.target.closest('button[data-dup]');
+          if (!btn) return;
+          mask.classList.add('hidden');
+          mask.removeEventListener('click', onClick);
+          resolve(btn.dataset.dup);
+        }
+        mask.addEventListener('click', onClick);
+      });
+    }
+
+    /** 把一个冲突文件强行再传一次 */
+    async function forceUploadFile(file, parsed, categoryId) {
+      const form = new FormData();
+      form.append('force', '1');
+      form.append('title', parsed.title || String(file.name || '未命名'));
+      form.append('code', parsed.code || '');
+      form.append('status', parsed.status || 'active');
+      if (categoryId) form.append('category_id', categoryId);
+      form.append('file', file);
+
+      const res = await fetch('/api/admin/specs', {
+        method: 'POST', body: form, credentials: 'same-origin',
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || '上传失败');
+      return data;
+    }
 
     // ---------------- 用户管理 ----------------
     let users = [];

@@ -24,6 +24,7 @@ import {
   assertSameOrigin,
 } from '../_lib/http.js';
 import { parseSpecFilename } from '../_lib/spec-filename.js';
+import { findBestMatch } from '../_lib/similar.js';
 
 const SESSION_DAYS = 30;
 const MAX_FAILED = 5;
@@ -45,7 +46,9 @@ export async function onRequest(context) {
     if (method !== 'GET' && method !== 'HEAD') assertSameOrigin(request);
     return await route({ request, env, url, method, path });
   } catch (err) {
-    if (err instanceof ApiError) return json({ error: err.message }, err.status);
+    if (err instanceof ApiError) {
+      return json({ error: err.message, ...(err.payload || {}) }, err.status);
+    }
     console.error('[api] 未处理的错误：', (err && err.stack) || err);
     return json({ error: '服务器开小差了，请稍后再试' }, 500);
   }
@@ -871,11 +874,21 @@ async function readSpecPayload(request) {
   return { fields: await readJson(request), file: null };
 }
 
-async function storeUpload(env, file) {
+
+/** 一次性取出所有规范的编号/名称/哈希，用于相似度比对 */
+async function loadSpecIndex(env) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, code, title, status, file_hash FROM specs ORDER BY created_at DESC LIMIT 2000'
+  ).all();
+  return results || [];
+}
+
+/** 读取并校验上传的文件，返回内容哈希（还没落盘） */
+async function readUpload(env, file) {
   if (!hasFileStorage(env)) {
     throw new ApiError(
       503,
-      '还没有配置文件存储（R2），目前只能保存正文。配置方法见 README。'
+      '还没有配置文件存储（R2/KV），目前只能保存正文。配置方法见 README。'
     );
   }
   const name = String(file.name || 'file');
@@ -889,11 +902,47 @@ async function storeUpload(env, file) {
     throw new ApiError(413, `单个文件不能超过 ${limitMb} MB，请先压缩或拆分`);
   }
 
-  const key = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
   const buffer = await file.arrayBuffer();
-  await putFile(env, key, buffer, contentType);
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  const hash = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 
-  return { key, name, size: file.size, type: contentType };
+  return { name, size: file.size, type: contentType, ext, buffer, hash };
+}
+
+/** 把读好的文件写进存储 */
+async function saveUpload(env, upload) {
+  const key = `${new Date().getFullYear()}/${crypto.randomUUID()}.${upload.ext}`;
+  await putFile(env, key, upload.buffer, upload.type);
+  return {
+    key,
+    name: upload.name,
+    size: upload.size,
+    type: upload.type,
+    hash: upload.hash,
+  };
+}
+
+/** 查一下这个哈希/编号是不是已经有了 */
+async function findDuplicate(env, { code, hash, excludeId }) {
+  if (code) {
+    const byCode = await env.DB.prepare('SELECT id, code, title FROM specs WHERE code = ?')
+      .bind(code)
+      .first();
+    if (byCode && byCode.id !== excludeId) {
+      return { kind: 'code', label: byCode.code || byCode.title, id: byCode.id };
+    }
+  }
+  if (hash) {
+    const byHash = await env.DB.prepare('SELECT id, code, title FROM specs WHERE file_hash = ?')
+      .bind(hash)
+      .first();
+    if (byHash && byHash.id !== excludeId) {
+      return { kind: 'file', label: byHash.code || byHash.title, id: byHash.id };
+    }
+  }
+  return null;
 }
 
 function validateSpec(fields, existing) {
@@ -948,20 +997,55 @@ async function adminSaveSpec({ request, env }) {
   const now = nowSec();
   const id = crypto.randomUUID();
 
-  let fileMeta = { key: null, name: null, size: null, type: null };
-  if (file) fileMeta = await storeUpload(env, file);
+  let fileMeta = { key: null, name: null, size: null, type: null, hash: null };
+
+  const upload = file ? await readUpload(env, file) : null;
+  const force = fields.force === '1' || fields.force === 1 || fields.force === true;
+
+  if (!force) {
+    const index = await loadSpecIndex(env);
+    const similar = findBestMatch({ code: data.code, title: data.title }, index, null);
+
+    if (similar) {
+      const err = new ApiError(409, '发现相似规范');
+      err.payload = {
+        similar,
+        incoming: { code: data.code, title: data.title },
+        kind: 'similar',
+      };
+      throw err;
+    }
+
+    const hashDup = upload
+      ? index.find(function (row) { return row.file_hash && row.file_hash === upload.hash; })
+      : null;
+    if (hashDup) {
+      const err = new ApiError(409, '文件内容完全相同');
+      err.payload = {
+        similar: {
+          id: hashDup.id, code: hashDup.code, title: hashDup.title,
+          status: hashDup.status, score: 1, reason: '文件内容完全相同',
+        },
+        incoming: { code: data.code, title: data.title },
+        kind: 'file',
+      };
+      throw err;
+    }
+  }
+
+  if (upload) fileMeta = await saveUpload(env, upload);
 
   await env.DB.prepare(
     `INSERT INTO specs
        (id, code, title, category_id, standard_type, version, effective_date,
         status, summary, content, file_key, file_name, file_size, file_type,
-        published, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        file_hash, published, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id, data.code, data.title, data.category_id, data.standard_type, data.version,
       data.effective_date, data.status, data.summary, data.content,
-      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type,
+      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type, fileMeta.hash || null,
       data.published, now, now
     )
     .run();
@@ -982,31 +1066,49 @@ async function adminUpdateSpec({ request, env }, id) {
     name: existing.file_name,
     size: existing.file_size,
     type: existing.file_type,
+    hash: existing.file_hash || null,
   };
 
+  const force = fields.force === '1' || fields.force === 1 || fields.force === true;
+
+  if (!force) {
+    const index = await loadSpecIndex(env);
+    const similar = findBestMatch({ code: data.code, title: data.title }, index, id);
+    if (similar) {
+      const err = new ApiError(409, '发现相似规范');
+      err.payload = {
+        similar,
+        incoming: { code: data.code, title: data.title },
+        kind: 'similar',
+      };
+      throw err;
+    }
+  }
+
   if (file) {
-    const uploaded = await storeUpload(env, file);
+    const upload = await readUpload(env, file);
+    const saved = await saveUpload(env, upload);
     await removeFile(env, existing.file_key);
-    fileMeta = uploaded;
+    fileMeta = saved;
   }
 
   if (fields.remove_file === '1' || fields.remove_file === true) {
     await removeFile(env, existing.file_key);
-    fileMeta = { key: null, name: null, size: null, type: null };
+    fileMeta = { key: null, name: null, size: null, type: null, hash: null };
   }
 
   await env.DB.prepare(
     `UPDATE specs
         SET code = ?, title = ?, category_id = ?, standard_type = ?, version = ?,
             effective_date = ?, status = ?, summary = ?, content = ?,
-            file_key = ?, file_name = ?, file_size = ?, file_type = ?,
+            file_key = ?, file_name = ?, file_size = ?, file_type = ?, file_hash = ?,
             published = ?, updated_at = ?
       WHERE id = ?`
   )
     .bind(
       data.code, data.title, data.category_id, data.standard_type, data.version,
       data.effective_date, data.status, data.summary, data.content,
-      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type,
+      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type, fileMeta.hash || null,
       data.published, nowSec(), id
     )
     .run();
@@ -1109,28 +1211,74 @@ async function adminBulkUpload({ request, env }) {
 
   const categoryId = String(form.get('category_id') || '').trim() || null;
   const created = [];
+  const conflicts = [];
   const failed = [];
   const now = nowSec();
+  const index = await loadSpecIndex(env);
 
-  for (const file of files) {
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+    const file = files[fileIndex];
     try {
-      const meta = await storeUpload(env, file);
-      const parsed = parseSpecFilename(meta.name);
+      const parsed = parseSpecFilename(String(file.name || 'file'));
+      const upload = await readUpload(env, file);
+
+      const similar = findBestMatch({ code: parsed.code, title: parsed.title }, index, null);
+      const hashDup = index.find(function (row) {
+        return row.file_hash && row.file_hash === upload.hash;
+      });
+      const match =
+        similar ||
+        (hashDup
+          ? {
+              id: hashDup.id,
+              code: hashDup.code,
+              title: hashDup.title,
+              status: hashDup.status,
+              score: 1,
+              reason: '文件内容完全相同',
+            }
+          : null);
+
+      if (match) {
+        conflicts.push({
+          fileIndex,
+          name: file.name,
+          parsed: { code: parsed.code, title: parsed.title, status: parsed.status },
+          match,
+        });
+        continue;
+      }
+
+      const meta = await saveUpload(env, upload);
       const id = crypto.randomUUID();
+
+      // 新记录也放进索引，防止同一批里的重复漏判
+      index.unshift({
+        id,
+        code: parsed.code,
+        title: parsed.title,
+        status: parsed.status,
+        file_hash: meta.hash,
+      });
+
       await env.DB.prepare(
         `INSERT INTO specs
            (id, code, title, category_id, standard_type, version, effective_date,
             status, summary, content, file_key, file_name, file_size, file_type,
-            published, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '', '', '', ?, '', '', ?, ?, ?, ?, 1, ?, ?)`
+            file_hash, published, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '', '', '', ?, '', '', ?, ?, ?, ?, ?, 1, ?, ?)`
       )
-        .bind(id, parsed.code, parsed.title, categoryId, parsed.status, meta.key, meta.name, meta.size, meta.type, now, now)
+        .bind(
+          id, parsed.code, parsed.title, categoryId, parsed.status,
+          meta.key, meta.name, meta.size, meta.type, meta.hash, now, now
+        )
         .run();
+
       created.push({ id, code: parsed.code, title: parsed.title, status: parsed.status });
     } catch (err) {
       failed.push({ name: file.name, error: err instanceof ApiError ? err.message : '处理失败' });
     }
   }
 
-  return json({ ok: true, created: created.length, failed });
+  return json({ ok: true, created: created.length, conflicts, failed });
 }
