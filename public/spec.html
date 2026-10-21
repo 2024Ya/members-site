@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>规范详情 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container">
+    <a class="small" href="/library" style="display:inline-block; margin-bottom:18px">← 返回规范库</a>
+    <div id="content">
+      <div class="empty">正在加载…</div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container row">
+    <span data-site-name>会员站</span>
+    <span class="spacer"></span>
+    <span>内容仅对注册会员开放</span>
+  </div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script src="/assets/specs.js"></script>
+<script src="/assets/markdown.js"></script>
+<script>
+  (async function () {
+    await UI.mountNav();
+
+    const user = await UI.requireLogin('/library');
+    if (!user) return;
+
+    const id = new URLSearchParams(location.search).get('id') || '';
+    const box = document.getElementById('content');
+
+    if (!id) {
+      box.innerHTML = '<div class="empty">没有指定规范，<a href="/library">回规范库</a></div>';
+      return;
+    }
+
+    try {
+      const data = await API.get('/specs/' + encodeURIComponent(id));
+      const s = data.spec;
+      const st = Specs.statusOf(s.status);
+
+      document.title = (s.code ? s.code + ' ' : '') + s.title + ' · ' + ((window.SITE && window.SITE.name) || '会员站');
+
+      const facts = [];
+      facts.push('<span class="badge ' + st[1] + '">' + st[0] + '</span>');
+      if (s.category_name) facts.push('<span>' + UI.escapeHtml(s.category_name) + '</span>');
+      if (s.standard_type) facts.push('<span>' + UI.escapeHtml(s.standard_type) + '</span>');
+      if (s.version) facts.push('<span>' + UI.escapeHtml(s.version) + '</span>');
+      if (s.effective_date) facts.push('<span>' + UI.escapeHtml(s.effective_date) + ' 实施</span>');
+      if (s.has_file) {
+        facts.push('<span>' + UI.escapeHtml((s.file_name || '').split('.').pop().toUpperCase()) +
+          ' · ' + Specs.formatSize(s.file_size) + '</span>');
+      }
+
+      box.innerHTML =
+        '<header class="spec-head">' +
+          (s.code ? '<div class="spec-code-big">' + UI.escapeHtml(s.code) + '</div>' : '') +
+          '<h1>' + UI.escapeHtml(s.title) + '</h1>' +
+          '<div class="spec-facts">' + facts.join('<span>·</span>') + '</div>' +
+          (s.summary ? '<div class="spec-summary">' + UI.escapeHtml(s.summary) + '</div>' : '') +
+          (s.published ? '' : '<div class="alert alert-info" style="margin-top:16px">这是草稿，只有管理员能看到</div>') +
+        '</header>' +
+        '<div class="spec-body">' +
+          '<aside class="toc" id="toc"></aside>' +
+          '<article class="prose" id="body"></article>' +
+        '</div>' +
+        '<div id="file-section"></div>';
+
+      const body = document.getElementById('body');
+      if (s.content) {
+        body.innerHTML = window.renderMarkdown(s.content);
+        Specs.buildToc(body, document.getElementById('toc'));
+      } else {
+        body.innerHTML = '<p class="muted">这部规范以原始文件形式提供，请在下方查看或下载。</p>';
+        document.getElementById('toc').style.display = 'none';
+      }
+
+      if (s.has_file) {
+        const isPdf = (s.file_type || '').indexOf('pdf') !== -1;
+        const url = '/api/files/' + encodeURIComponent(s.id);
+        const section = document.getElementById('file-section');
+        section.innerHTML =
+          '<h2 style="margin-top:44px">原始文件</h2>' +
+          '<div class="file-bar">' +
+            '<a class="btn btn-primary" href="' + url + '">下载 ' +
+              UI.escapeHtml((s.file_name || '').split('.').pop().toUpperCase()) +
+              (s.file_size ? '（' + Specs.formatSize(s.file_size) + '）' : '') + '</a>' +
+            (isPdf ? '<span class="small muted">或直接在下方阅读</span>' : '<span class="small muted">该格式需要下载后查看</span>') +
+          '</div>' +
+          (isPdf
+            ? '<iframe class="pdf-frame" style="margin-top:16px" src="' + url + '?inline=1" title="规范原文"></iframe>'
+            : '');
+      }
+    } catch (err) {
+      box.innerHTML =
+        '<div class="empty"><div class="big">🔍</div>' +
+        '<p style="margin:0 0 6px">' + UI.escapeHtml(err.message) + '</p>' +
+        '<p class="small" style="margin:0"><a href="/library">返回规范库</a></p></div>';
+    }
+  })();
+</script>
+</body>
+</html>

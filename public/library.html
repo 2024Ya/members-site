@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>规范库 · 会员站</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/"><span class="brand-dot">M</span><span data-site-name>会员站</span></a>
+    <nav class="nav" id="nav-actions"></nav>
+  </div>
+</header>
+
+<main class="section">
+  <div class="container">
+    <div class="lib-layout">
+
+      <aside class="lib-side">
+        <div class="side-block">
+          <div class="side-head">分类</div>
+          <div id="cat-list">
+            <a class="side-item active" href="#"><span>全部</span><span class="count">—</span></a>
+          </div>
+        </div>
+        <div class="side-block">
+          <div class="side-head">状态</div>
+          <div id="status-list">
+            <a class="side-item active" data-status=""><span>全部</span></a>
+            <a class="side-item" data-status="active"><span>现行</span></a>
+            <a class="side-item" data-status="replaced"><span>被替代</span></a>
+            <a class="side-item" data-status="abolished"><span>作废</span></a>
+            <a class="side-item" data-status="draft"><span>征求意见</span></a>
+          </div>
+        </div>
+      </aside>
+
+      <section class="lib-main">
+        <form class="search-bar" id="search-form">
+          <input class="input" id="q" type="search" placeholder="搜规范名称或编号，例如：SL 274 或 土石坝" autocomplete="off">
+          <button class="btn btn-primary" type="submit">搜索</button>
+        </form>
+
+        <div class="lib-toolbar">
+          <span id="result-info">正在加载…</span>
+          <span id="active-filter"></span>
+        </div>
+
+        <div id="list"></div>
+        <div class="pager" id="pager"></div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container row">
+    <span data-site-name>会员站</span>
+    <span class="spacer"></span>
+    <span>内容仅对注册会员开放</span>
+  </div>
+</footer>
+
+<script src="/assets/config.js"></script>
+<script src="/assets/common.js"></script>
+<script src="/assets/specs.js"></script>
+<script>
+  (async function () {
+    await UI.mountNav();
+
+    const STATUS = {
+      active: ['现行', 'badge-ok'],
+      replaced: ['被替代', 'badge-warn'],
+      abolished: ['作废', 'badge-danger'],
+      draft: ['征求意见', 'badge'],
+    };
+
+    const params = new URLSearchParams(location.search);
+    const state = {
+      q: params.get('q') || '',
+      cat: params.get('cat') || '',
+      status: params.get('status') || '',
+      page: Math.max(1, parseInt(params.get('page') || '1', 10) || 1),
+    };
+
+    document.getElementById('q').value = state.q;
+
+    let categories = [];
+
+    function syncUrl() {
+      const next = new URLSearchParams();
+      if (state.q) next.set('q', state.q);
+      if (state.cat) next.set('cat', state.cat);
+      if (state.status) next.set('status', state.status);
+      if (state.page > 1) next.set('page', String(state.page));
+      const qs = next.toString();
+      history.replaceState(null, '', qs ? '/library?' + qs : '/library');
+    }
+
+    function renderSidebar() {
+      const all = categories.reduce((sum, c) => sum + Number(c.total || 0), 0);
+      const items = ['<a class="side-item' + (state.cat === '' ? ' active' : '') +
+        '" href="#" data-cat=""><span>全部</span><span class="count">' + all + '</span></a>'];
+
+      categories.forEach(function (c) {
+        items.push(
+          '<a class="side-item' + (state.cat === c.id ? ' active' : '') +
+          '" href="#" data-cat="' + c.id + '"><span>' + UI.escapeHtml(c.name) +
+          '</span><span class="count">' + Number(c.total || 0) + '</span></a>'
+        );
+      });
+
+      const box = document.getElementById('cat-list');
+      box.innerHTML = items.join('');
+      box.querySelectorAll('.side-item').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          e.preventDefault();
+          state.cat = el.dataset.cat || '';
+          state.page = 1;
+          renderSidebar();
+          load();
+        });
+      });
+
+      document.querySelectorAll('#status-list .side-item').forEach(function (el) {
+        el.classList.toggle('active', (el.dataset.status || '') === state.status);
+      });
+    }
+
+    document.querySelectorAll('#status-list .side-item').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        state.status = el.dataset.status || '';
+        state.page = 1;
+        renderSidebar();
+        load();
+      });
+    });
+
+    document.getElementById('search-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      state.q = document.getElementById('q').value.trim();
+      state.page = 1;
+      load();
+    });
+
+    async function load() {
+      syncUrl();
+      const list = document.getElementById('list');
+      const info = document.getElementById('result-info');
+      list.innerHTML = '<div class="empty">正在加载…</div>';
+
+      const query = new URLSearchParams();
+      if (state.q) query.set('q', state.q);
+      if (state.cat) query.set('cat', state.cat);
+      if (state.status) query.set('status', state.status);
+      query.set('page', String(state.page));
+
+      try {
+        const data = await API.get('/specs?' + query.toString());
+        info.textContent = data.total
+          ? '共 ' + data.total + ' 部规范' + (state.q ? '（关键词：' + state.q + '）' : '')
+          : '没有找到匹配的规范';
+
+        const active = [];
+        const cat = categories.find(function (c) { return c.id === state.cat; });
+        if (cat) active.push(cat.name);
+        if (state.status) active.push(STATUS[state.status][0]);
+        document.getElementById('active-filter').textContent = active.join(' · ');
+
+        if (!data.specs.length) {
+          list.innerHTML =
+            '<div class="empty"><div class="big">📚</div>' +
+            '<p style="margin:0 0 6px">这里还没有匹配的规范</p>' +
+            '<p class="small" style="margin:0">换个关键词，或者清空筛选条件试试</p></div>';
+          document.getElementById('pager').innerHTML = '';
+          return;
+        }
+
+        list.innerHTML = data.specs.map(function (s) {
+          const st = STATUS[s.status] || STATUS.active;
+          const sub = [
+            s.category_name || '未分类',
+            s.version ? s.version : '',
+            s.effective_date ? s.effective_date + ' 实施' : '',
+          ].filter(Boolean).join(' · ');
+
+          return (
+            '<a class="spec-row" href="/spec?id=' + encodeURIComponent(s.id) + '">' +
+              '<div class="spec-row-main">' +
+                '<div class="spec-row-title">' +
+                  (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '') +
+                  UI.escapeHtml(s.title) +
+                '</div>' +
+                '<div class="spec-row-sub">' + UI.escapeHtml(sub) + '</div>' +
+              '</div>' +
+              '<div class="spec-row-side">' +
+                '<span class="badge ' + st[1] + '">' + st[0] + '</span>' +
+                (s.has_file ? '<span class="file-flag">' + UI.escapeHtml((s.standard_type || 'PDF').toUpperCase()) + '</span>' : '') +
+              '</div>' +
+            '</a>'
+          );
+        }).join('');
+
+        renderPager(data.page, data.pages);
+      } catch (err) {
+        info.textContent = '加载失败';
+        list.innerHTML = '<div class="empty">' + UI.escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    function renderPager(page, pages) {
+      const box = document.getElementById('pager');
+      if (pages <= 1) { box.innerHTML = ''; return; }
+
+      const parts = [];
+      parts.push(page > 1
+        ? '<a href="#" data-page="' + (page - 1) + '">上一页</a>'
+        : '<span class="disabled">上一页</span>');
+
+      const start = Math.max(1, page - 2);
+      const end = Math.min(pages, start + 4);
+      for (let i = start; i <= end; i++) {
+        parts.push(i === page
+          ? '<span class="current">' + i + '</span>'
+          : '<a href="#" data-page="' + i + '">' + i + '</a>');
+      }
+
+      parts.push(page < pages
+        ? '<a href="#" data-page="' + (page + 1) + '">下一页</a>'
+        : '<span class="disabled">下一页</span>');
+
+      box.innerHTML = parts.join('');
+      box.querySelectorAll('a[data-page]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          e.preventDefault();
+          state.page = parseInt(el.dataset.page, 10);
+          load();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+    }
+
+    try {
+      const data = await API.get('/categories');
+      categories = data.categories || [];
+    } catch (err) {
+      categories = [];
+    }
+    renderSidebar();
+    await load();
+  })();
+</script>
+</body>
+</html>

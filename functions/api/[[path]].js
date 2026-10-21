@@ -78,6 +78,24 @@ async function route(ctx) {
   if (method === 'GET' && path === '/api/admin/users') return adminListUsers(ctx);
   if (method === 'GET' && path === '/api/admin/overview') return adminOverview(ctx);
 
+  // 规范库
+  if (method === 'GET' && path === '/api/categories') return listCategories(ctx);
+  if (method === 'GET' && path === '/api/specs') return listSpecs(ctx);
+  if (method === 'GET' && path === '/api/admin/meta') return adminMeta(ctx);
+  if (method === 'GET' && path === '/api/admin/specs') return adminListSpecs(ctx);
+  if (method === 'POST' && path === '/api/admin/specs') return adminSaveSpec(ctx);
+  if (method === 'POST' && path === '/api/admin/specs/bulk') return adminBulkUpload(ctx);
+
+  const specId = matchId(path, '/api/specs/');
+  if (specId && method === 'GET') return getSpec(ctx, specId);
+
+  const fileId = matchId(path, '/api/files/');
+  if (fileId && method === 'GET') return serveSpecFile(ctx, fileId);
+
+  const adminSpecId = matchId(path, '/api/admin/specs/');
+  if (adminSpecId && method === 'PATCH') return adminUpdateSpec(ctx, adminSpecId);
+  if (adminSpecId && method === 'DELETE') return adminDeleteSpec(ctx, adminSpecId);
+
   const articleId = matchId(path, '/api/articles/');
   if (articleId && method === 'GET') return getArticle(ctx, articleId);
 
@@ -612,4 +630,439 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
+}
+
+// ================================================================ 规范库
+const SPEC_STATUSES = ['active', 'replaced', 'abolished', 'draft'];
+const MAX_FILE_BYTES = 40 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  zip: 'application/zip',
+};
+
+function hasFileStorage(env) {
+  return Boolean(env.FILES || env.FILES_KV);
+}
+
+async function putFile(env, key, data, contentType) {
+  if (env.FILES) {
+    await env.FILES.put(key, data, { httpMetadata: { contentType } });
+    return;
+  }
+  if (env.FILES_KV) {
+    await env.FILES_KV.put(key, data);
+    return;
+  }
+  throw new ApiError(503, '还没有配置文件存储，暂时无法保存文件');
+}
+
+async function readFile(env, key) {
+  if (env.FILES) {
+    const obj = await env.FILES.get(key);
+    if (!obj) return null;
+    return { body: obj.body, size: obj.size };
+  }
+  if (env.FILES_KV) {
+    const buf = await env.FILES_KV.get(key, 'arrayBuffer');
+    if (!buf) return null;
+    return { body: buf, size: buf.byteLength };
+  }
+  return null;
+}
+
+async function removeFile(env, key) {
+  if (!key) return;
+  try {
+    if (env.FILES) await env.FILES.delete(key);
+    else if (env.FILES_KV) await env.FILES_KV.delete(key);
+  } catch (err) {
+    console.error('[file] 删除失败：', err);
+  }
+}
+
+// ---------------------------------------------------------------- 公开接口
+async function listCategories({ env }) {
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.name, c.sort,
+            (SELECT COUNT(*) FROM specs s
+              WHERE s.category_id = c.id AND s.published = 1) AS total
+       FROM categories c
+      ORDER BY c.sort ASC, c.name ASC`
+  ).all();
+  return json({ categories: results || [] });
+}
+
+async function listSpecs({ env, url }) {
+  const q = String(url.searchParams.get('q') || '').trim().slice(0, 60);
+  const category = String(url.searchParams.get('cat') || '').trim();
+  const type = String(url.searchParams.get('type') || '').trim();
+  const status = String(url.searchParams.get('status') || '').trim();
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
+  const size = 20;
+
+  const where = ['s.published = 1'];
+  const params = [];
+  if (category) { where.push('s.category_id = ?'); params.push(category); }
+  if (type) { where.push('s.standard_type = ?'); params.push(type); }
+  if (status) { where.push('s.status = ?'); params.push(status); }
+  if (q) {
+    where.push('(s.title LIKE ? OR s.code LIKE ? OR s.summary LIKE ?)');
+    const like = `%${q}%`;
+    params.push(like, like, like);
+  }
+  const whereSql = 'WHERE ' + where.join(' AND ');
+
+  const counted = await env.DB.prepare(`SELECT COUNT(*) AS n FROM specs s ${whereSql}`)
+    .bind(...params)
+    .first();
+  const total = counted ? Number(counted.n) : 0;
+
+  const { results } = await env.DB.prepare(
+    `SELECT s.id, s.code, s.title, s.category_id, c.name AS category_name,
+            s.standard_type, s.version, s.effective_date, s.status, s.summary,
+            CASE WHEN s.file_key IS NULL THEN 0 ELSE 1 END AS has_file,
+            s.created_at
+       FROM specs s
+       LEFT JOIN categories c ON c.id = s.category_id
+       ${whereSql}
+      ORDER BY CASE WHEN s.code = '' THEN 1 ELSE 0 END ASC, s.code ASC, s.title ASC
+      LIMIT ? OFFSET ?`
+  )
+    .bind(...params, size, (page - 1) * size)
+    .all();
+
+  return json({
+    specs: results || [],
+    total,
+    page,
+    pages: Math.max(1, Math.ceil(total / size)),
+  });
+}
+
+async function getSpec({ request, env }, id) {
+  const user = await requireUser(env, request);
+  const spec = await env.DB.prepare(
+    `SELECT s.*, c.name AS category_name
+       FROM specs s
+       LEFT JOIN categories c ON c.id = s.category_id
+      WHERE s.id = ?`
+  )
+    .bind(id)
+    .first();
+
+  if (!spec) throw new ApiError(404, '规范不存在或已下架');
+  if (!spec.published && user.role !== 'admin') throw new ApiError(404, '规范不存在或已下架');
+
+  return json({
+    spec: {
+      id: spec.id,
+      code: spec.code,
+      title: spec.title,
+      category_id: spec.category_id,
+      category_name: spec.category_name,
+      standard_type: spec.standard_type,
+      version: spec.version,
+      effective_date: spec.effective_date,
+      status: spec.status,
+      summary: spec.summary,
+      content: spec.content,
+      file_name: spec.file_name,
+      file_size: spec.file_size,
+      file_type: spec.file_type,
+      has_file: Boolean(spec.file_key),
+      published: spec.published,
+      created_at: spec.created_at,
+      updated_at: spec.updated_at,
+    },
+  });
+}
+
+/** 文件下载：必须登录，未发布的只有管理员能取 */
+async function serveSpecFile({ request, env, url }, id) {
+  const user = await requireUser(env, request);
+  const spec = await env.DB.prepare('SELECT * FROM specs WHERE id = ?').bind(id).first();
+  if (!spec || !spec.file_key) throw new ApiError(404, '文件不存在');
+  if (!spec.published && user.role !== 'admin') throw new ApiError(404, '文件不存在');
+
+  const stored = await readFile(env, spec.file_key);
+  if (!stored) throw new ApiError(404, '文件已丢失，请联系管理员重新上传');
+
+  const inline = url.searchParams.get('inline') === '1';
+  const name = spec.file_name || 'file';
+  const ascii = name.replace(/[^\x20-\x7E]/g, '_');
+
+  return new Response(stored.body, {
+    headers: {
+      'Content-Type': spec.file_type || 'application/octet-stream',
+      'Content-Disposition':
+        `${inline ? 'inline' : 'attachment'}; filename="${ascii}"; ` +
+        `filename*=UTF-8''${encodeURIComponent(name)}`,
+      'Cache-Control': 'private, max-age=600',
+    },
+  });
+}
+
+// ---------------------------------------------------------------- 管理后台
+async function adminMeta({ request, env }) {
+  await requireAdmin(env, request);
+  const { results } = await env.DB.prepare(
+    'SELECT id, name, sort FROM categories ORDER BY sort ASC, name ASC'
+  ).all();
+  return json({
+    categories: results || [],
+    storage: env.FILES ? 'r2' : env.FILES_KV ? 'kv' : 'none',
+    statuses: SPEC_STATUSES,
+  });
+}
+
+async function adminListSpecs({ request, env, url }) {
+  await requireAdmin(env, request);
+  const q = String(url.searchParams.get('q') || '').trim().slice(0, 60);
+
+  const where = [];
+  const params = [];
+  if (q) {
+    where.push('(s.title LIKE ? OR s.code LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`);
+  }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const { results } = await env.DB.prepare(
+    `SELECT s.id, s.code, s.title, s.category_id, c.name AS category_name,
+            s.standard_type, s.version, s.status, s.published, s.updated_at,
+            CASE WHEN s.file_key IS NULL THEN 0 ELSE 1 END AS has_file,
+            s.file_name, s.file_size
+       FROM specs s
+       LEFT JOIN categories c ON c.id = s.category_id
+       ${whereSql}
+      ORDER BY s.updated_at DESC
+      LIMIT 300`
+  )
+    .bind(...params)
+    .all();
+
+  return json({ specs: results || [] });
+}
+
+async function readSpecPayload(request) {
+  const contentType = request.headers.get('Content-Type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData();
+    const fields = {};
+    let file = null;
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') {
+        fields[key] = value;
+      } else if (value && typeof value === 'object' && typeof value.size === 'number' && value.size > 0) {
+        file = value;
+      }
+    }
+    return { fields, file };
+  }
+  return { fields: await readJson(request), file: null };
+}
+
+async function storeUpload(env, file) {
+  if (!hasFileStorage(env)) {
+    throw new ApiError(
+      503,
+      '还没有配置文件存储（R2），目前只能保存正文。配置方法见 README。'
+    );
+  }
+  const name = String(file.name || 'file');
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const contentType = ALLOWED_FILE_TYPES[ext];
+  if (!contentType) throw new ApiError(400, '只支持 PDF、Word、Excel、ZIP 文件');
+  if (file.size > MAX_FILE_BYTES) throw new ApiError(413, '单个文件不能超过 40 MB');
+
+  const key = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
+  const buffer = await file.arrayBuffer();
+  await putFile(env, key, buffer, contentType);
+
+  return { key, name, size: file.size, type: contentType };
+}
+
+function validateSpec(fields, existing) {
+  const pick = (key) => (fields[key] === undefined ? undefined : fields[key]);
+  const value = (key, fallback) => {
+    const raw = pick(key);
+    if (raw === undefined) return existing ? existing[key] : fallback;
+    return raw;
+  };
+
+  const title = String(value('title', '') || '').trim();
+  const code = String(value('code', '') || '').trim();
+  const status = String(value('status', 'active') || 'active');
+  const standardType = String(value('standard_type', '') || '').trim();
+  const version = String(value('version', '') || '').trim();
+  const effectiveDate = String(value('effective_date', '') || '').trim();
+  const summary = String(value('summary', '') || '').trim();
+  const content = String(value('content', '') || '');
+  const categoryId = String(value('category_id', '') || '').trim();
+  const publishedRaw = pick('published');
+  const published = publishedRaw === undefined
+    ? (existing ? existing.published : 1)
+    : (publishedRaw === '0' || publishedRaw === 'false' || publishedRaw === false || publishedRaw === 0 ? 0 : 1);
+
+  if (!title) throw new ApiError(400, '规范名称不能为空');
+  if (title.length > 160) throw new ApiError(400, '名称最多 160 个字');
+  if (code.length > 60) throw new ApiError(400, '编号最多 60 个字符');
+  if (standardType.length > 20) throw new ApiError(400, '标准类别最多 20 个字符');
+  if (version.length > 40) throw new ApiError(400, '版本最多 40 个字');
+  if (effectiveDate.length > 20) throw new ApiError(400, '实施日期格式不对');
+  if (summary.length > 600) throw new ApiError(400, '摘要最多 600 个字');
+  if (content.length > 200_000) throw new ApiError(400, '正文太长了');
+
+  return {
+    title,
+    code,
+    status: SPEC_STATUSES.includes(status) ? status : 'active',
+    standard_type: standardType,
+    version,
+    effective_date: effectiveDate,
+    summary,
+    content,
+    category_id: categoryId || null,
+    published,
+  };
+}
+
+async function adminSaveSpec({ request, env }) {
+  await requireAdmin(env, request);
+  const { fields, file } = await readSpecPayload(request);
+  const data = validateSpec(fields, null);
+  const now = nowSec();
+  const id = crypto.randomUUID();
+
+  let fileMeta = { key: null, name: null, size: null, type: null };
+  if (file) fileMeta = await storeUpload(env, file);
+
+  await env.DB.prepare(
+    `INSERT INTO specs
+       (id, code, title, category_id, standard_type, version, effective_date,
+        status, summary, content, file_key, file_name, file_size, file_type,
+        published, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      id, data.code, data.title, data.category_id, data.standard_type, data.version,
+      data.effective_date, data.status, data.summary, data.content,
+      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type,
+      data.published, now, now
+    )
+    .run();
+
+  return json({ ok: true, id }, 201);
+}
+
+async function adminUpdateSpec({ request, env }, id) {
+  await requireAdmin(env, request);
+  const existing = await env.DB.prepare('SELECT * FROM specs WHERE id = ?').bind(id).first();
+  if (!existing) throw new ApiError(404, '规范不存在');
+
+  const { fields, file } = await readSpecPayload(request);
+  const data = validateSpec(fields, existing);
+
+  let fileMeta = {
+    key: existing.file_key,
+    name: existing.file_name,
+    size: existing.file_size,
+    type: existing.file_type,
+  };
+
+  if (file) {
+    const uploaded = await storeUpload(env, file);
+    await removeFile(env, existing.file_key);
+    fileMeta = uploaded;
+  }
+
+  if (fields.remove_file === '1' || fields.remove_file === true) {
+    await removeFile(env, existing.file_key);
+    fileMeta = { key: null, name: null, size: null, type: null };
+  }
+
+  await env.DB.prepare(
+    `UPDATE specs
+        SET code = ?, title = ?, category_id = ?, standard_type = ?, version = ?,
+            effective_date = ?, status = ?, summary = ?, content = ?,
+            file_key = ?, file_name = ?, file_size = ?, file_type = ?,
+            published = ?, updated_at = ?
+      WHERE id = ?`
+  )
+    .bind(
+      data.code, data.title, data.category_id, data.standard_type, data.version,
+      data.effective_date, data.status, data.summary, data.content,
+      fileMeta.key, fileMeta.name, fileMeta.size, fileMeta.type,
+      data.published, nowSec(), id
+    )
+    .run();
+
+  return json({ ok: true });
+}
+
+async function adminDeleteSpec({ request, env }, id) {
+  await requireAdmin(env, request);
+  const existing = await env.DB.prepare('SELECT * FROM specs WHERE id = ?').bind(id).first();
+  if (!existing) throw new ApiError(404, '规范不存在');
+  await removeFile(env, existing.file_key);
+  await env.DB.prepare('DELETE FROM specs WHERE id = ?').bind(id).run();
+  return json({ ok: true });
+}
+
+/** 从文件名里拆出编号，例如「SL 274-2020 碾压式土石坝设计规范.pdf」 */
+function parseSpecFilename(filename) {
+  const base = String(filename).replace(/\.[^.]+$/, '').trim();
+  const matched = base.match(
+    /^([A-Za-z]{1,6}(?:\s*\/\s*[A-Za-z]{1,6})?\s*\d+(?:\.\d+)?\s*[-—–]\s*\d{2,4})\s*[_\-\s、]+\s*(.+)$/
+  );
+  if (matched) {
+    return {
+      code: matched[1].replace(/\s+/g, ' ').replace(/\s*\/\s*/g, '/').trim(),
+      title: matched[2].trim(),
+    };
+  }
+  return { code: '', title: base };
+}
+
+/** 批量上传：文件名即元数据，先全部建成记录，之后逐个补分类和版本 */
+async function adminBulkUpload({ request, env }) {
+  await requireAdmin(env, request);
+  const form = await request.formData();
+  const files = form
+    .getAll('files')
+    .filter((f) => f && typeof f === 'object' && typeof f.size === 'number' && f.size > 0);
+
+  if (!files.length) throw new ApiError(400, '没有收到文件');
+  if (files.length > 30) throw new ApiError(400, '一次最多 30 个文件，分批传更快');
+
+  const categoryId = String(form.get('category_id') || '').trim() || null;
+  const created = [];
+  const failed = [];
+  const now = nowSec();
+
+  for (const file of files) {
+    try {
+      const meta = await storeUpload(env, file);
+      const parsed = parseSpecFilename(meta.name);
+      const id = crypto.randomUUID();
+      await env.DB.prepare(
+        `INSERT INTO specs
+           (id, code, title, category_id, standard_type, version, effective_date,
+            status, summary, content, file_key, file_name, file_size, file_type,
+            published, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '', '', '', 'active', '', '', ?, ?, ?, ?, 1, ?, ?)`
+      )
+        .bind(id, parsed.code, parsed.title, categoryId, meta.key, meta.name, meta.size, meta.type, now, now)
+        .run();
+      created.push({ id, code: parsed.code, title: parsed.title });
+    } catch (err) {
+      failed.push({ name: file.name, error: err instanceof ApiError ? err.message : '处理失败' });
+    }
+  }
+
+  return json({ ok: true, created: created.length, failed });
 }

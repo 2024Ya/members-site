@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>管理后台 · 会员站</title>
+  <title>规范管理 · 会员站</title>
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
 </head>
@@ -18,61 +18,116 @@
 
 <main class="section">
   <div class="container">
+
     <div id="deny" class="empty hidden" style="margin-top:20px">
       <div class="big">🔒</div>
       <p style="margin:0 0 6px" id="deny-text">这个页面只有管理员能进</p>
-      <p class="small" style="margin:0"><a href="/app">回会员中心</a></p>
+      <p class="small" style="margin:0"><a href="/library">回规范库</a></p>
     </div>
 
     <div id="panel" class="hidden">
-      <h1 style="font-size:1.6rem">管理后台</h1>
-      <p class="muted small" style="margin-bottom:22px">在这里发布会员内容、管理注册用户</p>
+      <h1 style="font-size:1.6rem; margin-bottom:6px">规范管理</h1>
+      <p class="muted small" style="margin-bottom:20px">上传、编辑、下架规范；会员登录后才能看到正文和文件</p>
 
-      <div class="stats" style="margin-bottom:28px">
-        <div class="stat"><div class="n" id="stat-users">–</div><div class="l">注册用户</div></div>
-        <div class="stat"><div class="n" id="stat-new">–</div><div class="l">近 7 天新增</div></div>
-        <div class="stat"><div class="n" id="stat-articles">–</div><div class="l">文章总数</div></div>
-        <div class="stat"><div class="n" id="stat-published">–</div><div class="l">已发布</div></div>
-      </div>
+      <div id="storage-alert" class="alert alert-info hidden"></div>
 
       <div class="tabs">
-        <button class="tab active" data-tab="articles" type="button">文章管理</button>
-        <button class="tab" data-tab="users" type="button">用户管理</button>
+        <button class="tab active" data-tab="list" type="button">规范列表</button>
+        <button class="tab" data-tab="bulk" type="button">批量上传</button>
       </div>
 
-      <!-- 文章 -->
-      <section id="tab-articles">
+      <section id="tab-list">
         <div class="row" style="margin-bottom:16px">
-          <button class="btn btn-primary" id="new-article" type="button">+ 新建文章</button>
+          <button class="btn btn-primary" id="new-spec" type="button">+ 新建规范</button>
+          <input class="input" id="admin-q" placeholder="搜索名称或编号" style="max-width:260px">
           <span class="spacer"></span>
-          <span class="small muted">草稿只有你能看到，发布后会员才能阅读</span>
+          <span class="small muted" id="count-text"></span>
         </div>
 
         <div class="card hidden" id="editor" style="margin-bottom:18px">
-          <h2 id="editor-title" style="font-size:1.1rem">新建文章</h2>
-          <form id="article-form" novalidate>
-            <div class="field">
-              <label for="a-title">标题</label>
-              <input class="input" id="a-title" maxlength="120" placeholder="例如：新手入门第一课">
+          <h2 id="editor-title" style="font-size:1.1rem">新建规范</h2>
+          <form id="spec-form" novalidate>
+            <div class="form-grid">
+              <div class="field">
+                <label for="f-code">编号</label>
+                <input class="input" id="f-code" placeholder="SL 274-2020">
+              </div>
+              <div class="field span-2">
+                <label for="f-title">名称（必填）</label>
+                <input class="input" id="f-title" placeholder="碾压式土石坝设计规范">
+              </div>
+
+              <div class="field">
+                <label for="f-category">分类</label>
+                <select class="select" id="f-category">
+                  <option value="">未分类</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="f-type">标准类别</label>
+                <input class="input" id="f-type" list="type-list" placeholder="GB / SL / DL …">
+                <datalist id="type-list">
+                  <option value="GB"></option>
+                  <option value="GB/T"></option>
+                  <option value="SL"></option>
+                  <option value="SL/T"></option>
+                  <option value="DL"></option>
+                  <option value="DL/T"></option>
+                  <option value="T/CHES"></option>
+                  <option value="地方标准"></option>
+                  <option value="企业标准"></option>
+                </datalist>
+              </div>
+              <div class="field">
+                <label for="f-status">状态</label>
+                <select class="select" id="f-status">
+                  <option value="active">现行</option>
+                  <option value="replaced">被替代</option>
+                  <option value="abolished">作废</option>
+                  <option value="draft">征求意见</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="f-version">版本 / 年号</label>
+                <input class="input" id="f-version" placeholder="2020 版">
+              </div>
+              <div class="field">
+                <label for="f-date">实施日期</label>
+                <input class="input" id="f-date" type="date">
+              </div>
+              <div class="field">
+                <label for="f-file">原始文件</label>
+                <input class="input" id="f-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip">
+              </div>
+
+              <div class="field span-3">
+                <label for="f-summary">摘要 / 适用范围</label>
+                <input class="input" id="f-summary" maxlength="600" placeholder="一句话说明适用范围">
+              </div>
+
+              <div class="field span-3">
+                <label for="f-content">正文（可选，支持 Markdown）</label>
+                <textarea class="textarea" id="f-content" style="min-height:180px" placeholder="没有 PDF 时可以在这里直接写正文；有 PDF 时可留空"></textarea>
+              </div>
             </div>
-            <div class="field">
-              <label for="a-summary">摘要（列表页显示）</label>
-              <input class="input" id="a-summary" maxlength="300" placeholder="一句话说明这篇文章讲什么">
-            </div>
-            <div class="field">
-              <label for="a-content">正文</label>
-              <textarea class="textarea" id="a-content" placeholder="支持 Markdown：# 标题、**加粗**、- 列表、`代码`、> 引用、[文字](链接)"></textarea>
-              <div class="hint">空行分段；三个反引号包起来是代码块。</div>
-            </div>
-            <div class="field">
+
+            <div class="row" style="margin-bottom:16px">
               <label style="display:flex; align-items:center; gap:8px; font-weight:500">
-                <input type="checkbox" id="a-published" style="width:16px;height:16px">
-                立即发布（不勾选则存为草稿）
+                <input type="checkbox" id="f-published" checked style="width:16px;height:16px">
+                发布（取消勾选则仅管理员可见）
+              </label>
+              <label id="remove-file-wrap" class="hidden" style="display:flex; align-items:center; gap:8px; font-weight:500">
+                <input type="checkbox" id="f-remove-file" style="width:16px;height:16px">
+                删除现有文件
               </label>
             </div>
+
             <div class="row">
-              <button class="btn btn-primary" type="submit" id="save-article">保存</button>
-              <button class="btn btn-ghost" type="button" id="cancel-edit">取消</button>
+              <button class="btn btn-primary" type="submit" id="save-btn">保存</button>
+              <button class="btn btn-ghost" type="button" id="cancel-btn">取消</button>
+              <span class="spacer"></span>
+              <span class="small muted" id="current-file"></span>
             </div>
           </form>
         </div>
@@ -81,31 +136,49 @@
           <div class="table-wrap">
             <table class="data">
               <thead>
-                <tr><th>标题</th><th>状态</th><th>更新时间</th><th style="width:150px">操作</th></tr>
+                <tr><th>编号</th><th>名称</th><th>分类</th><th>状态</th><th>文件</th><th>更新</th><th style="width:130px">操作</th></tr>
               </thead>
-              <tbody id="article-rows">
-                <tr><td colspan="4" class="muted">加载中…</td></tr>
+              <tbody id="spec-rows">
+                <tr><td colspan="7" class="muted">加载中…</td></tr>
               </tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- 用户 -->
-      <section id="tab-users" class="hidden">
-        <div class="card card-tight">
-          <div class="table-wrap">
-            <table class="data">
-              <thead>
-                <tr><th>邮箱</th><th>昵称</th><th>身份</th><th>状态</th><th>注册时间</th><th style="width:260px">操作</th></tr>
-              </thead>
-              <tbody id="user-rows">
-                <tr><td colspan="6" class="muted">加载中…</td></tr>
-              </tbody>
-            </table>
+      <section id="tab-bulk" class="hidden">
+        <div class="card">
+          <h2 style="font-size:1.1rem">批量上传 PDF</h2>
+          <p class="small muted">文件名会自动识别编号和名称，例如：<code>SL 274-2020 碾压式土石坝设计规范.pdf</code></p>
+
+          <div class="field" style="max-width:320px">
+            <label for="bulk-category">统一归入分类</label>
+            <select class="select" id="bulk-category">
+              <option value="">暂不分类</option>
+            </select>
           </div>
+
+          <div class="drop-zone" id="drop-zone">
+            <div style="font-size:28px; margin-bottom:8px">📄</div>
+            <div>把文件拖到这里，或
+              <label for="bulk-files" style="color:var(--brand); cursor:pointer; text-decoration:underline">点击选择</label>
+            </div>
+            <div class="upload-hint">一次最多 30 个，单个不超过 40 MB</div>
+            <input id="bulk-files" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.zip" class="hidden">
+          </div>
+
+          <div id="bulk-selected" class="small muted" style="margin-top:12px"></div>
+
+          <div class="row" style="margin-top:16px">
+            <button class="btn btn-primary" id="bulk-upload" type="button" disabled>开始上传</button>
+            <span class="spacer"></span>
+            <span class="small muted" id="bulk-progress"></span>
+          </div>
+
+          <div id="bulk-result" style="margin-top:18px"></div>
         </div>
       </section>
+
     </div>
   </div>
 </main>
@@ -116,6 +189,7 @@
 
 <script src="/assets/config.js"></script>
 <script src="/assets/common.js"></script>
+<script src="/assets/specs.js"></script>
 <script>
   (async function () {
     await UI.mountNav();
@@ -123,112 +197,114 @@
     const user = await UI.requireLogin();
     if (!user) return;
 
-    const deny = document.getElementById('deny');
     if (user.role !== 'admin') {
       document.getElementById('deny-text').textContent =
         '当前账号（' + user.email + '）不是管理员，进不了这个页面。';
-      deny.classList.remove('hidden');
+      document.getElementById('deny').classList.remove('hidden');
       return;
     }
-
     document.getElementById('panel').classList.remove('hidden');
 
-    let articles = [];
+    let meta = { categories: [], storage: 'none' };
     let editingId = null;
+    let pendingFiles = [];
 
-    // ---------------- Tab 切换 ----------------
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
         tab.classList.add('active');
-        const name = tab.dataset.tab;
-        document.getElementById('tab-articles').classList.toggle('hidden', name !== 'articles');
-        document.getElementById('tab-users').classList.toggle('hidden', name !== 'users');
+        document.getElementById('tab-list').classList.toggle('hidden', tab.dataset.tab !== 'list');
+        document.getElementById('tab-bulk').classList.toggle('hidden', tab.dataset.tab !== 'bulk');
       });
     });
 
-    // ---------------- 概览 ----------------
-    async function loadOverview() {
-      try {
-        const s = await API.get('/admin/overview');
-        document.getElementById('stat-users').textContent = s.users;
-        document.getElementById('stat-new').textContent = s.newUsers7d;
-        document.getElementById('stat-articles').textContent = s.articles;
-        document.getElementById('stat-published').textContent = s.published;
-      } catch (err) {
-        UI.toast('概览加载失败：' + err.message, 'err');
-      }
+    try {
+      meta = await API.get('/admin/meta');
+    } catch (err) {
+      UI.toast('初始化失败：' + err.message, 'err');
     }
 
-    // ---------------- 文章 ----------------
-    async function loadArticles() {
-      const tbody = document.getElementById('article-rows');
+    const catOptions = meta.categories.map(function (c) {
+      return '<option value="' + c.id + '">' + UI.escapeHtml(c.name) + '</option>';
+    }).join('');
+    document.getElementById('f-category').insertAdjacentHTML('beforeend', catOptions);
+    document.getElementById('bulk-category').insertAdjacentHTML('beforeend', catOptions);
+
+    if (meta.storage === 'none') {
+      const alert = document.getElementById('storage-alert');
+      alert.classList.remove('hidden');
+      alert.innerHTML = '还没配置文件存储，<strong>目前只能录入正文，无法上传 PDF</strong>。开通后把绑定写进 <code>wrangler.toml</code> 就能启用（见 README）。';
+    }
+
+    async function loadList(q) {
+      const tbody = document.getElementById('spec-rows');
       try {
-        const data = await API.get('/admin/articles');
-        articles = data.articles || [];
-        if (!articles.length) {
-          tbody.innerHTML = '<tr><td colspan="4" class="muted">还没有文章，点上面的「新建文章」开始写吧</td></tr>';
+        const data = await API.get('/admin/specs' + (q ? '?q=' + encodeURIComponent(q) : ''));
+        const specs = data.specs || [];
+        document.getElementById('count-text').textContent = specs.length + ' 条';
+
+        if (!specs.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="muted">还没有规范，点「新建规范」或去「批量上传」</td></tr>';
           return;
         }
-        tbody.innerHTML = articles.map(function (a) {
+
+        tbody.innerHTML = specs.map(function (s) {
+          const st = Specs.statusOf(s.status);
           return (
             '<tr>' +
-              '<td><strong>' + UI.escapeHtml(a.title) + '</strong></td>' +
-              '<td>' + (a.published
-                ? '<span class="badge badge-ok">已发布</span>'
-                : '<span class="badge badge-warn">草稿</span>') + '</td>' +
-              '<td class="muted small">' + UI.formatDate(a.updated_at) + '</td>' +
+              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+              '<td><strong>' + UI.escapeHtml(s.title) + '</strong>' +
+                (s.published ? '' : ' <span class="badge badge-warn">未发布</span>') + '</td>' +
+              '<td class="small muted">' + UI.escapeHtml(s.category_name || '未分类') + '</td>' +
+              '<td><span class="badge ' + st[1] + '">' + st[0] + '</span></td>' +
+              '<td class="small">' + (s.has_file
+                ? '<span class="badge badge-brand">' + UI.escapeHtml((s.file_name || '').split('.').pop().toUpperCase()) + '</span>'
+                : '<span class="muted">—</span>') + '</td>' +
+              '<td class="small muted">' + UI.formatDate(s.updated_at) + '</td>' +
               '<td>' +
-                '<button class="btn btn-ghost btn-sm" data-action="edit" data-id="' + a.id + '">编辑</button> ' +
-                '<button class="btn btn-danger btn-sm" data-action="delete" data-id="' + a.id + '">删除</button>' +
+                '<button class="btn btn-ghost btn-sm" data-action="edit" data-id="' + s.id + '">编辑</button> ' +
+                '<button class="btn btn-danger btn-sm" data-action="delete" data-id="' + s.id + '">删除</button>' +
               '</td>' +
             '</tr>'
           );
         }).join('');
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
       }
     }
 
-    document.getElementById('article-rows').addEventListener('click', async function (e) {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn) return;
-      const id = btn.dataset.id;
-      const action = btn.dataset.action;
-
-      if (action === 'edit') {
-        const a = articles.find((x) => x.id === id);
-        if (!a) return;
-        try {
-          const data = await API.get('/articles/' + encodeURIComponent(id));
-          openEditor(data.article);
-        } catch (err) {
-          UI.toast(err.message, 'err');
-        }
-        return;
-      }
-
-      if (action === 'delete') {
-        if (!confirm('确定删除这篇文章吗？删除后无法恢复。')) return;
-        try {
-          await API.del('/admin/articles/' + encodeURIComponent(id));
-          UI.toast('已删除', 'ok');
-          closeEditor();
-          await loadArticles();
-          await loadOverview();
-        } catch (err) {
-          UI.toast(err.message, 'err');
-        }
-      }
+    document.getElementById('admin-q').addEventListener('input', function (e) {
+      clearTimeout(window.__qTimer);
+      const value = e.target.value.trim();
+      window.__qTimer = setTimeout(function () { loadList(value); }, 250);
     });
 
-    function openEditor(article) {
-      editingId = article ? article.id : null;
-      document.getElementById('editor-title').textContent = article ? '编辑文章' : '新建文章';
-      document.getElementById('a-title').value = article ? article.title : '';
-      document.getElementById('a-summary').value = article ? article.summary : '';
-      document.getElementById('a-content').value = article ? article.content : '';
-      document.getElementById('a-published').checked = article ? Boolean(article.published) : true;
+    function openEditor(spec) {
+      editingId = spec ? spec.id : null;
+      document.getElementById('editor-title').textContent = spec ? '编辑规范' : '新建规范';
+      document.getElementById('f-code').value = spec ? spec.code : '';
+      document.getElementById('f-title').value = spec ? spec.title : '';
+      document.getElementById('f-category').value = spec ? (spec.category_id || '') : '';
+      document.getElementById('f-type').value = spec ? spec.standard_type : '';
+      document.getElementById('f-status').value = spec ? spec.status : 'active';
+      document.getElementById('f-version').value = spec ? spec.version : '';
+      document.getElementById('f-date').value = spec ? spec.effective_date : '';
+      document.getElementById('f-summary').value = spec ? spec.summary : '';
+      document.getElementById('f-content').value = spec ? spec.content : '';
+      document.getElementById('f-published').checked = spec ? Boolean(spec.published) : true;
+      document.getElementById('f-file').value = '';
+      document.getElementById('f-remove-file').checked = false;
+
+      const wrap = document.getElementById('remove-file-wrap');
+      const current = document.getElementById('current-file');
+      if (spec && spec.has_file) {
+        wrap.classList.remove('hidden');
+        current.textContent = '当前文件：' + spec.file_name + '（' + Specs.formatSize(spec.file_size) + '）';
+      } else {
+        wrap.classList.add('hidden');
+        current.textContent = '';
+      }
+
       document.getElementById('editor').classList.remove('hidden');
       document.getElementById('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -236,38 +312,79 @@
     function closeEditor() {
       editingId = null;
       document.getElementById('editor').classList.add('hidden');
-      document.getElementById('article-form').reset();
+      document.getElementById('spec-form').reset();
     }
 
-    document.getElementById('new-article').addEventListener('click', function () { openEditor(null); });
-    document.getElementById('cancel-edit').addEventListener('click', closeEditor);
+    document.getElementById('new-spec').addEventListener('click', function () { openEditor(null); });
+    document.getElementById('cancel-btn').addEventListener('click', closeEditor);
 
-    document.getElementById('article-form').addEventListener('submit', async function (e) {
+    document.getElementById('spec-rows').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+
+      if (btn.dataset.action === 'edit') {
+        try {
+          const data = await API.get('/specs/' + encodeURIComponent(id));
+          openEditor(data.spec);
+        } catch (err) {
+          UI.toast(err.message, 'err');
+        }
+        return;
+      }
+
+      if (btn.dataset.action === 'delete') {
+        if (!confirm('确定删除这条规范吗？上传过的文件也会一起删除。')) return;
+        try {
+          await API.del('/admin/specs/' + encodeURIComponent(id));
+          UI.toast('已删除', 'ok');
+          closeEditor();
+          await loadList(document.getElementById('admin-q').value.trim());
+        } catch (err) {
+          UI.toast(err.message, 'err');
+        }
+      }
+    });
+
+    document.getElementById('spec-form').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const btn = document.getElementById('save-article');
-      const payload = {
-        title: document.getElementById('a-title').value.trim(),
-        summary: document.getElementById('a-summary').value.trim(),
-        content: document.getElementById('a-content').value,
-        published: document.getElementById('a-published').checked,
-      };
+      const btn = document.getElementById('save-btn');
+      const title = document.getElementById('f-title').value.trim();
+      if (!title) return UI.toast('规范名称不能为空', 'err');
 
-      if (!payload.title) return UI.toast('标题不能为空', 'err');
+      const form = new FormData();
+      form.append('code', document.getElementById('f-code').value.trim());
+      form.append('title', title);
+      form.append('category_id', document.getElementById('f-category').value);
+      form.append('standard_type', document.getElementById('f-type').value.trim());
+      form.append('version', document.getElementById('f-version').value.trim());
+      form.append('effective_date', document.getElementById('f-date').value);
+      form.append('status', document.getElementById('f-status').value);
+      form.append('summary', document.getElementById('f-summary').value.trim());
+      form.append('content', document.getElementById('f-content').value);
+      form.append('published', document.getElementById('f-published').checked ? '1' : '0');
+      if (document.getElementById('f-remove-file').checked) form.append('remove_file', '1');
+
+      const file = document.getElementById('f-file').files[0];
+      if (file) form.append('file', file);
 
       btn.disabled = true;
       btn.textContent = '保存中…';
       try {
-        if (editingId) {
-          await API.patch('/admin/articles/' + encodeURIComponent(editingId), payload);
-          UI.toast('已保存', 'ok');
-        } else {
-          const res = await API.post('/admin/articles', payload);
-          UI.toast(payload.published ? '已发布' : '已存为草稿', 'ok');
-          if (res && res.id) editingId = res.id;
-        }
+        const url = editingId
+          ? '/api/admin/specs/' + encodeURIComponent(editingId)
+          : '/api/admin/specs';
+        const res = await fetch(url, {
+          method: editingId ? 'PATCH' : 'POST',
+          body: form,
+          credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '保存失败');
+
+        UI.toast(editingId ? '已保存' : '已创建', 'ok');
         closeEditor();
-        await loadArticles();
-        await loadOverview();
+        await loadList(document.getElementById('admin-q').value.trim());
       } catch (err) {
         UI.toast(err.message, 'err');
       } finally {
@@ -276,89 +393,77 @@
       }
     });
 
-    // ---------------- 用户 ----------------
-    async function loadUsers() {
-      const tbody = document.getElementById('user-rows');
-      try {
-        const data = await API.get('/admin/users');
-        const list = data.users || [];
-        if (!list.length) {
-          tbody.innerHTML = '<tr><td colspan="6" class="muted">还没有用户</td></tr>';
-          return;
-        }
-        tbody.innerHTML = list.map(function (u) {
-          const badges =
-            (u.role === 'admin' ? '<span class="badge badge-brand">管理员</span> ' : '<span class="badge">会员</span> ') +
-            (u.banned ? '<span class="badge badge-danger">已停用</span> ' : '') +
-            (u.verified ? '' : '<span class="badge badge-warn">未验证</span>');
-          const isSelf = u.id === user.id;
-          return (
-            '<tr>' +
-              '<td class="small">' + UI.escapeHtml(u.email) + (isSelf ? ' <span class="muted">(你)</span>' : '') + '</td>' +
-              '<td class="small">' + UI.escapeHtml(u.name || '') + '</td>' +
-              '<td>' + badges + '</td>' +
-              '<td class="small">' + (u.banned ? '已停用' : '正常') + '</td>' +
-              '<td class="muted small">' + UI.formatDate(u.created_at) + '</td>' +
-              '<td>' +
-                '<button class="btn btn-ghost btn-sm" data-action="ban" data-id="' + u.id + '" ' + (isSelf ? 'disabled' : '') + '>' +
-                  (u.banned ? '解封' : '停用') + '</button> ' +
-                '<button class="btn btn-ghost btn-sm" data-action="role" data-id="' + u.id + '" ' + (isSelf ? 'disabled' : '') + '>' +
-                  (u.role === 'admin' ? '取消管理员' : '设为管理员') + '</button> ' +
-                '<button class="btn btn-ghost btn-sm" data-action="reset" data-id="' + u.id + '">改密码</button>' +
-              '</td>' +
-            '</tr>'
-          );
-        }).join('');
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
-      }
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('bulk-files');
+    const uploadBtn = document.getElementById('bulk-upload');
+
+    function setFiles(files) {
+      pendingFiles = Array.prototype.slice.call(files).filter(Boolean);
+      document.getElementById('bulk-selected').textContent = pendingFiles.length
+        ? '已选择 ' + pendingFiles.length + ' 个：' +
+          pendingFiles.slice(0, 3).map((f) => f.name).join('、') +
+          (pendingFiles.length > 3 ? ' 等' : '')
+        : '';
+      uploadBtn.disabled = !pendingFiles.length;
     }
 
-    document.getElementById('user-rows').addEventListener('click', async function (e) {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn) return;
-      const id = btn.dataset.id;
-      const action = btn.dataset.action;
+    fileInput.addEventListener('change', function () { setFiles(fileInput.files); });
 
+    ['dragenter', 'dragover'].forEach(function (name) {
+      dropZone.addEventListener(name, function (e) {
+        e.preventDefault();
+        dropZone.classList.add('hot');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+      dropZone.addEventListener(name, function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('hot');
+      });
+    });
+    dropZone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) setFiles(e.dataTransfer.files);
+    });
+
+    uploadBtn.addEventListener('click', async function () {
+      if (!pendingFiles.length) return;
+      const form = new FormData();
+      const category = document.getElementById('bulk-category').value;
+      if (category) form.append('category_id', category);
+      pendingFiles.forEach(function (f) { form.append('files', f); });
+
+      uploadBtn.disabled = true;
+      document.getElementById('bulk-progress').textContent = '上传中，别关页面…';
       try {
-        if (action === 'ban') {
-          const row = await API.get('/admin/users');
-          const target = (row.users || []).find((u) => u.id === id);
-          if (!target) return;
-          if (!confirm((target.banned ? '解封 ' : '停用 ') + target.email + ' ？')) return;
-          await API.patch('/admin/users/' + encodeURIComponent(id), { banned: !target.banned });
-          UI.toast(target.banned ? '已解封' : '已停用', 'ok');
-        }
+        const res = await fetch('/api/admin/specs/bulk', {
+          method: 'POST', body: form, credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '上传失败');
 
-        if (action === 'role') {
-          const row = await API.get('/admin/users');
-          const target = (row.users || []).find((u) => u.id === id);
-          if (!target) return;
-          const next = target.role === 'admin' ? 'user' : 'admin';
-          if (!confirm('把 ' + target.email + ' 设为' + (next === 'admin' ? '管理员' : '普通会员') + '？')) return;
-          await API.patch('/admin/users/' + encodeURIComponent(id), { role: next });
-          UI.toast('已更新', 'ok');
-        }
+        const failed = data.failed || [];
+        document.getElementById('bulk-result').innerHTML =
+          '<div class="alert ' + (failed.length ? 'alert-info' : 'alert-ok') + '">' +
+            '成功上传 <strong>' + data.created + '</strong> 个' +
+            (failed.length
+              ? '，失败 ' + failed.length + ' 个：' +
+                failed.map((f) => UI.escapeHtml(f.name + '（' + f.error + '）')).join('、')
+              : '') +
+          '</div>' +
+          '<p class="small muted">接下来到「规范列表」里逐条补上分类、版本和状态。</p>';
 
-        if (action === 'reset') {
-          const pwd = prompt('给这个用户设置一个新密码（至少 8 位）：');
-          if (!pwd) return;
-          if (pwd.length < 8) return UI.toast('密码至少 8 位', 'err');
-          await API.patch('/admin/users/' + encodeURIComponent(id), { newPassword: pwd });
-          UI.toast('密码已重置，请把新密码告诉对方', 'ok');
-        }
-
-        await loadUsers();
-        await loadOverview();
+        setFiles([]);
+        fileInput.value = '';
+        await loadList('');
       } catch (err) {
         UI.toast(err.message, 'err');
+      } finally {
+        uploadBtn.disabled = false;
+        document.getElementById('bulk-progress').textContent = '';
       }
     });
 
-    // ---------------- 启动 ----------------
-    await loadOverview();
-    await loadArticles();
-    await loadUsers();
+    await loadList('');
   })();
 </script>
 </body>

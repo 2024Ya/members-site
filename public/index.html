@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>会员站 · 会员专属文章与教程</title>
-  <meta name="description" content="注册成为会员，阅读全部专属文章与教程。">
+  <title>水利规范库</title>
+  <meta name="description" content="水利行业规范集中查询，注册后可阅读全文与原始文件。">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3C/svg%3E">
 </head>
@@ -19,74 +19,43 @@
 
 <section class="hero">
   <div class="hero-aurora" aria-hidden="true"></div>
-  <div class="container hero-inner">
-    <div class="hero-copy">
-      <span class="badge badge-brand">会员制内容站</span>
-      <h1>专属内容，<br><span class="grad">只给会员看</span></h1>
-      <p class="lead">注册一个账号即可阅读全部会员专属文章和教程。内容由管理员在后台发布，持续更新。</p>
+  <div class="container">
+    <div class="hero-copy" style="max-width:660px">
+      <span class="badge badge-brand">水利行业规范库</span>
+      <h1>查规范，<br><span class="grad">不用再翻硬盘</span></h1>
+      <p class="lead">按编号、名称、关键词检索，注册后查看全文与原始文件。所有标准集中一处，版本和状态一眼看清。</p>
 
-      <div class="row hero-actions">
-        <a class="btn btn-primary" href="/register" id="cta-main">免费注册</a>
-        <a class="btn btn-ghost" href="/login" id="cta-second">已有账号，直接登录</a>
-      </div>
+      <form class="hero-search" action="/library" method="get">
+        <input class="input" type="search" name="q" placeholder="输入编号或关键词，如 SL 274、土石坝" aria-label="搜索规范">
+        <button class="btn btn-primary" type="submit">搜索</button>
+      </form>
 
-      <div class="hero-stats hidden" id="hero-stats">
+      <div class="hero-stats">
         <div>
-          <div class="n" id="stat-count">—</div>
-          <div class="l">篇会员内容</div>
+          <div class="n" id="stat-specs">—</div>
+          <div class="l">部规范</div>
+        </div>
+        <div>
+          <div class="n" id="stat-cats">—</div>
+          <div class="l">个分类</div>
         </div>
         <div>
           <div class="n">0 元</div>
           <div class="l">注册即可阅读</div>
         </div>
-        <div>
-          <div class="n">100%</div>
-          <div class="l">无广告</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="hero-art" aria-hidden="true">
-      <div class="ghost-card g1"></div>
-      <div class="ghost-card g2"></div>
-      <div class="ghost-card g3">
-        <div class="ghost-line w70"></div>
-        <div class="ghost-line w90"></div>
-        <div class="ghost-line w55"></div>
-        <div class="ghost-lock">🔒</div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section hidden" id="latest">
+<section class="section" style="padding-top:8px">
   <div class="container">
     <div class="section-head">
-      <h2>最新更新</h2>
-      <p class="muted small">标题和摘要公开，正文仅对会员开放</p>
+      <h2>按分类浏览</h2>
+      <p class="muted small">综合、水文、勘测、设计、施工、验收、运维等</p>
     </div>
-    <div class="article-grid" id="latest-grid"></div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="container">
-    <div class="features">
-      <div class="feature">
-        <div class="icon">🔒</div>
-        <h3>内容不公开</h3>
-        <p>文章只对登录会员开放，未登录访问时会自动引导到登录页。</p>
-      </div>
-      <div class="feature">
-        <div class="icon">👤</div>
-        <h3>账号安全</h3>
-        <p>密码加盐哈希存储，服务端不保存明文；连续输错会自动锁定一段时间。</p>
-      </div>
-      <div class="feature">
-        <div class="icon">⚙️</div>
-        <h3>持续更新</h3>
-        <p>内容由管理员在后台发布，新文章发布后会员刷新即可阅读。</p>
-      </div>
+    <div class="cat-grid" id="cat-grid">
+      <div class="muted small">正在加载…</div>
     </div>
   </div>
 </section>
@@ -94,20 +63,32 @@
 <section class="section">
   <div class="container">
     <div class="section-head">
-      <h2>三步开始</h2>
+      <h2>最近更新</h2>
+      <p class="muted small"><a href="/library">查看全部 →</a></p>
     </div>
+    <div id="recent">
+      <div class="muted small">正在加载…</div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
     <div class="features">
       <div class="feature">
-        <h3>1. 注册账号</h3>
-        <p>填写昵称、邮箱和密码，十秒钟完成注册。</p>
+        <div class="icon">🔎</div>
+        <h3>按编号精确找</h3>
+        <p>记不住全名也没关系，输编号片段就能定位，例如「SL 274」。</p>
       </div>
       <div class="feature">
-        <h3>2. 阅读内容</h3>
-        <p>登录后进入会员中心，看到全部已发布的文章和教程。</p>
+        <div class="icon">🏷️</div>
+        <h3>版本状态清楚</h3>
+        <p>每条都标注现行、被替代还是作废，避免照着过期规范干活。</p>
       </div>
       <div class="feature">
-        <h3>3. 持续跟进</h3>
-        <p>新内容发布后直接出现在会员中心，不需要另外订阅。</p>
+        <div class="icon">📄</div>
+        <h3>原文在线看</h3>
+        <p>PDF 可直接在线阅读，也能下载到本地，不用再到处找文件。</p>
       </div>
     </div>
   </div>
@@ -117,54 +98,67 @@
   <div class="container row">
     <span data-site-name>会员站</span>
     <span class="spacer"></span>
-    <span>由 Cloudflare 免费托管</span>
+    <span>内容仅对注册会员开放</span>
   </div>
 </footer>
 
 <script src="/assets/config.js"></script>
 <script src="/assets/common.js"></script>
+<script src="/assets/specs.js"></script>
 <script>
   (async function () {
-    const user = await UI.mountNav();
+    await UI.mountNav();
 
-    if (user) {
-      const main = document.getElementById('cta-main');
-      const second = document.getElementById('cta-second');
-      main.textContent = '进入会员中心';
-      main.setAttribute('href', '/app');
-      second.textContent = user.role === 'admin' ? '管理后台' : '我的账号';
-      second.setAttribute('href', user.role === 'admin' ? '/admin' : '/app');
-    }
-
-    // 最新更新：只拿标题和摘要，没登录也能看到
     try {
-      const data = await API.get('/public/articles');
-      const list = data.articles || [];
-      if (!list.length) return;
+      const results = await Promise.all([API.get('/categories'), API.get('/specs?page=1')]);
+      const categories = results[0].categories || [];
+      const specData = results[1];
 
-      document.getElementById('latest').classList.remove('hidden');
-      document.getElementById('hero-stats').classList.remove('hidden');
-      document.getElementById('stat-count').textContent = data.total || list.length;
+      document.getElementById('stat-cats').textContent = categories.length;
+      document.getElementById('stat-specs').textContent = specData.total || 0;
 
-      document.getElementById('latest-grid').innerHTML = list.map(function (a) {
-        const href = user
-          ? '/article?id=' + encodeURIComponent(a.id)
-          : '/login?next=' + encodeURIComponent('/article?id=' + a.id);
-        const lock = user ? '' : '<span class="lock-icon" title="登录后可读全文">🔒</span>';
+      document.getElementById('cat-grid').innerHTML = categories.map(function (c) {
         return (
-          '<a class="article-card" href="' + href + '">' +
-            '<div class="card-top">' +
-              '<span class="badge badge-brand">会员专享</span>' +
-              lock +
+          '<a class="cat-card" href="/library?cat=' + encodeURIComponent(c.id) + '">' +
+            '<div class="n">' + UI.escapeHtml(c.name) + '</div>' +
+            '<div class="c">' + Number(c.total || 0) + ' 部</div>' +
+          '</a>'
+        );
+      }).join('');
+
+      const recent = specData.specs || [];
+      const box = document.getElementById('recent');
+      if (!recent.length) {
+        box.innerHTML =
+          '<div class="empty"><div class="big">📚</div>' +
+          '<p style="margin:0 0 6px">规范库还是空的</p>' +
+          '<p class="small" style="margin:0">管理员登录后台即可上传第一批规范</p></div>';
+        return;
+      }
+
+      box.innerHTML = recent.slice(0, 6).map(function (s) {
+        const st = Specs.statusOf(s.status);
+        const sub = [s.category_name || '未分类', s.effective_date ? s.effective_date + ' 实施' : '']
+          .filter(Boolean).join(' · ');
+        return (
+          '<a class="spec-row" href="/spec?id=' + encodeURIComponent(s.id) + '">' +
+            '<div class="spec-row-main">' +
+              '<div class="spec-row-title">' +
+                (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '') +
+                UI.escapeHtml(s.title) +
+              '</div>' +
+              '<div class="spec-row-sub">' + UI.escapeHtml(sub) + '</div>' +
             '</div>' +
-            '<h3>' + UI.escapeHtml(a.title) + '</h3>' +
-            (a.summary ? '<p>' + UI.escapeHtml(a.summary) + '</p>' : '<p></p>') +
-            '<div class="article-meta"><span>' + UI.formatDate(a.created_at) + '</span></div>' +
+            '<div class="spec-row-side">' +
+              '<span class="badge ' + st[1] + '">' + st[0] + '</span>' +
+              (s.has_file ? '<span class="file-flag">文件</span>' : '') +
+            '</div>' +
           '</a>'
         );
       }).join('');
     } catch (err) {
-      /* 没有内容或接口还没就绪时，静默隐藏这一块 */
+      document.getElementById('recent').innerHTML =
+        '<div class="empty">加载失败：' + UI.escapeHtml(err.message) + '</div>';
     }
   })();
 </script>

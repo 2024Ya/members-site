@@ -101,7 +101,7 @@
       ? '<a class="navlink" href="/admin">管理后台</a>'
       : '';
     box.innerHTML =
-      '<a class="navlink" href="/app">会员中心</a>' +
+      '<a class="navlink" href="/library">规范库</a>' +
       adminLink +
       '<a class="navlink" href="#" id="logout-link">退出</a>';
 
