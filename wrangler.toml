@@ -14,3 +14,4 @@ database_id = "c6eff260-17bd-47b0-b60f-1b5295424323"
 [[kv_namespaces]]
 binding = "FILES_KV"
 id = "2b5b8efb902e49f99c044e89bf6c62b7"
+ 
