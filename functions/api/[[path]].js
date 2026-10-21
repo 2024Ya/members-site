@@ -86,6 +86,10 @@ async function route(ctx) {
   if (method === 'GET' && path === '/api/admin/specs') return adminListSpecs(ctx);
   if (method === 'POST' && path === '/api/admin/specs') return adminSaveSpec(ctx);
   if (method === 'POST' && path === '/api/admin/specs/bulk') return adminBulkUpload(ctx);
+  if (method === 'GET' && path === '/api/admin/health') return adminHealth(ctx);
+
+  const reviewMatch = path.match(/^\/api\/admin\/specs\/([A-Za-z0-9_-]{1,64})\/review$/);
+  if (reviewMatch && method === 'POST') return adminMarkReviewed(ctx, reviewMatch[1]);
 
   const specId = matchId(path, '/api/specs/');
   if (specId && method === 'GET') return getSpec(ctx, specId);
@@ -1017,6 +1021,79 @@ async function adminDeleteSpec({ request, env }, id) {
   await removeFile(env, existing.file_key);
   await env.DB.prepare('DELETE FROM specs WHERE id = ?').bind(id).run();
   return json({ ok: true });
+}
+
+/** 从编号里取年份：SL/T 618-2021 -> 2021 */
+function specYear(code) {
+  const matches = String(code || '').match(/(19|20)\d{2}/g);
+  if (!matches || !matches.length) return null;
+  const year = Number(matches[matches.length - 1]);
+  return year >= 1950 && year <= 2100 ? year : null;
+}
+
+/** 状态巡检：到期该复核的、以及「编号很老但还标着现行」的 */
+async function adminHealth({ request, env }) {
+  await requireAdmin(env, request);
+  const now = nowSec();
+  const currentYear = new Date(now * 1000).getFullYear();
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, code, title, status, reviewed_at, review_cycle, created_at
+       FROM specs`
+  ).all();
+
+  const stats = { total: 0, active: 0, replaced: 0, abolished: 0, draft: 0 };
+  const due = [];
+  const suspect = [];
+
+  for (const row of results || []) {
+    stats.total += 1;
+    if (stats[row.status] !== undefined) stats[row.status] += 1;
+
+    const cycle = Number(row.review_cycle) || 24;
+    const anchor = Number(row.reviewed_at || row.created_at || now);
+    const dueAt = anchor + cycle * 30 * 86400;
+    const overdueDays = Math.floor((now - dueAt) / 86400);
+
+    if (row.status === 'active' && overdueDays >= 0) {
+      due.push({
+        id: row.id,
+        code: row.code,
+        title: row.title,
+        reviewed_at: row.reviewed_at || null,
+        overdue_days: overdueDays,
+        cycle,
+      });
+      continue;
+    }
+
+    const year = specYear(row.code);
+    if (row.status === 'active' && !row.reviewed_at && year && currentYear - year >= 10) {
+      suspect.push({
+        id: row.id,
+        code: row.code,
+        title: row.title,
+        year,
+        age: currentYear - year,
+      });
+    }
+  }
+
+  due.sort((a, b) => b.overdue_days - a.overdue_days);
+  suspect.sort((a, b) => a.year - b.year);
+
+  return json({ stats, due, suspect, generated_at: now });
+}
+
+/** 标记「已复核」，重新开始计时 */
+async function adminMarkReviewed({ request, env }, id) {
+  await requireAdmin(env, request);
+  const spec = await env.DB.prepare('SELECT id FROM specs WHERE id = ?').bind(id).first();
+  if (!spec) throw new ApiError(404, '规范不存在');
+
+  const now = nowSec();
+  await env.DB.prepare('UPDATE specs SET reviewed_at = ? WHERE id = ?').bind(now, id).run();
+  return json({ ok: true, reviewed_at: now });
 }
 
 /** 批量上传：文件名即元数据，先全部建成记录，之后逐个补分类和版本 */

@@ -1,4 +1,4 @@
-// 规范库共用：状态标签、文件大小、目录生成
+﻿// 规范库共用：状态标签、文件大小、目录生成
 (function () {
   'use strict';
 
@@ -51,5 +51,16 @@
     });
   }
 
-  window.Specs = { STATUS, statusOf, formatSize, buildToc };
+  /** 拼接「查时效」跳转链接，没有配置就返回空 */
+  function checkUrl(code) {
+    const tpl = (window.SITE && window.SITE.checkUrl) || '';
+    if (!tpl || !code || String(code).trim() === '') return '';
+    return tpl.replace('{code}', encodeURIComponent(String(code).trim()));
+  }
+
+  function checkName() {
+    return (window.SITE && window.SITE.checkName) || '标准网站';
+  }
+
+  window.Specs = { STATUS, statusOf, formatSize, buildToc, checkUrl, checkName };
 })();

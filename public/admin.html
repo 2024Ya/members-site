@@ -34,6 +34,9 @@
       <div class="tabs">
         <button class="tab active" data-tab="list" type="button">规范列表</button>
         <button class="tab" data-tab="bulk" type="button">批量上传</button>
+        <button class="tab" data-tab="health" type="button">
+          状态巡检 <span class="badge badge-warn hidden" id="health-badge"></span>
+        </button>
       </div>
 
       <section id="tab-list">
@@ -179,6 +182,46 @@
         </div>
       </section>
 
+      <section id="tab-health" class="hidden">
+        <div class="stats" style="margin-bottom:22px">
+          <div class="stat"><div class="n" id="h-active">–</div><div class="l">现行</div></div>
+          <div class="stat"><div class="n" id="h-replaced">–</div><div class="l">被替代</div></div>
+          <div class="stat"><div class="n" id="h-abolished">–</div><div class="l">作废</div></div>
+          <div class="stat"><div class="n" id="h-due">–</div><div class="l">待复核</div></div>
+        </div>
+
+        <div class="alert alert-info" style="margin-bottom:20px">
+          系统没法自动知道规范是否失效——没有权威数据源可查。这里按「复核周期」（默认 24 个月）提醒你定期核对：
+          仍有效就点「已复核」，被替代了就把状态改成「被替代」。
+        </div>
+
+        <div class="section-head" style="margin-bottom:10px">
+          <h2 style="font-size:1.05rem">待复核</h2>
+          <p class="muted small">到期未复核的规范，按逾期天数排序</p>
+        </div>
+        <div class="card card-tight" style="margin-bottom:26px">
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>编号</th><th>名称</th><th>上次复核</th><th>逾期</th><th style="width:170px">操作</th></tr></thead>
+              <tbody id="health-due"><tr><td colspan="5" class="muted">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section-head" style="margin-bottom:10px">
+          <h2 style="font-size:1.05rem">疑似过时</h2>
+          <p class="muted small">编号年份超过 10 年、仍标为现行、且从未复核过</p>
+        </div>
+        <div class="card card-tight">
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>编号</th><th>名称</th><th>编号年份</th><th style="width:150px">操作</th></tr></thead>
+              <tbody id="health-suspect"><tr><td colspan="4" class="muted">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
 </main>
@@ -215,6 +258,8 @@
         tab.classList.add('active');
         document.getElementById('tab-list').classList.toggle('hidden', tab.dataset.tab !== 'list');
         document.getElementById('tab-bulk').classList.toggle('hidden', tab.dataset.tab !== 'bulk');
+        document.getElementById('tab-health').classList.toggle('hidden', tab.dataset.tab !== 'health');
+        if (tab.dataset.tab === 'health') loadHealth();
       });
     });
 
@@ -454,7 +499,80 @@
 
         setFiles([]);
         fileInput.value = '';
-        await loadList('');
+        // ---------------- 状态巡检 ----------------
+    async function loadHealth() {
+      try {
+        const data = await API.get('/admin/health');
+        document.getElementById('h-active').textContent = data.stats.active;
+        document.getElementById('h-replaced').textContent = data.stats.replaced;
+        document.getElementById('h-abolished').textContent = data.stats.abolished;
+        document.getElementById('h-due').textContent = data.due.length;
+
+        const badge = document.getElementById('health-badge');
+        if (data.due.length) {
+          badge.textContent = data.due.length;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+
+        const dueBody = document.getElementById('health-due');
+        if (!data.due.length) {
+          dueBody.innerHTML = '<tr><td colspan="5" class="muted">没有到期待复核的规范</td></tr>';
+        } else {
+          dueBody.innerHTML = data.due.map(function (s) {
+            const check = Specs.checkUrl(s.code);
+            return '<tr>' +
+              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
+              '<td class="small muted">' + (s.reviewed_at ? UI.formatDate(s.reviewed_at) : '从未') + '</td>' +
+              '<td><span class="badge badge-danger">' + s.overdue_days + ' 天</span></td>' +
+              '<td>' +
+                '<button class="btn btn-primary btn-sm" data-review="' + s.id + '">已复核</button> ' +
+                '<a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">查看</a>' +
+                (check ? ' <a class="btn btn-ghost btn-sm" href="' + check + '" target="_blank" rel="noopener">查时效</a>' : '') +
+              '</td>' +
+            '</tr>';
+          }).join('');
+        }
+
+        const susBody = document.getElementById('health-suspect');
+        if (!data.suspect.length) {
+          susBody.innerHTML = '<tr><td colspan="4" class="muted">没有疑似过时的规范</td></tr>';
+        } else {
+          susBody.innerHTML = data.suspect.map(function (s) {
+            const check = Specs.checkUrl(s.code);
+            return '<tr>' +
+              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '—') + '</td>' +
+              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
+              '<td class="small muted">' + s.year + '（' + s.age + ' 年前）</td>' +
+              '<td><a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">核对</a>' +
+                (check ? ' <a class="btn btn-ghost btn-sm" href="' + check + '" target="_blank" rel="noopener">查时效</a>' : '') + '</td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch (err) {
+        document.getElementById('health-due').innerHTML =
+          '<tr><td colspan="5" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    document.getElementById('health-due').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-review]');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await API.post('/admin/specs/' + encodeURIComponent(btn.dataset.review) + '/review', {});
+        UI.toast('已标记为复核', 'ok');
+        await loadHealth();
+      } catch (err) {
+        UI.toast(err.message, 'err');
+        btn.disabled = false;
+      }
+    });
+
+    await loadList('');
+    await loadHealth();
       } catch (err) {
         UI.toast(err.message, 'err');
       } finally {
@@ -463,7 +581,76 @@
       }
     });
 
+    // ---------------- 状态巡检 ----------------
+    async function loadHealth() {
+      try {
+        const data = await API.get('/admin/health');
+        document.getElementById('h-active').textContent = data.stats.active;
+        document.getElementById('h-replaced').textContent = data.stats.replaced;
+        document.getElementById('h-abolished').textContent = data.stats.abolished;
+        document.getElementById('h-due').textContent = data.due.length;
+
+        const badge = document.getElementById('health-badge');
+        if (data.due.length) {
+          badge.textContent = data.due.length;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+
+        const dueBody = document.getElementById('health-due');
+        if (!data.due.length) {
+          dueBody.innerHTML = '<tr><td colspan="5" class="muted">没有到期待复核的规范</td></tr>';
+        } else {
+          dueBody.innerHTML = data.due.map(function (s) {
+            return '<tr>' +
+              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
+              '<td class="small muted">' + (s.reviewed_at ? UI.formatDate(s.reviewed_at) : '从未') + '</td>' +
+              '<td><span class="badge badge-danger">' + s.overdue_days + ' 天</span></td>' +
+              '<td>' +
+                '<button class="btn btn-primary btn-sm" data-review="' + s.id + '">已复核</button> ' +
+                '<a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">查看</a>' +
+              '</td>' +
+            '</tr>';
+          }).join('');
+        }
+
+        const susBody = document.getElementById('health-suspect');
+        if (!data.suspect.length) {
+          susBody.innerHTML = '<tr><td colspan="4" class="muted">没有疑似过时的规范</td></tr>';
+        } else {
+          susBody.innerHTML = data.suspect.map(function (s) {
+            return '<tr>' +
+              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '—') + '</td>' +
+              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
+              '<td class="small muted">' + s.year + '（' + s.age + ' 年前）</td>' +
+              '<td><a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">核对</a></td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch (err) {
+        document.getElementById('health-due').innerHTML =
+          '<tr><td colspan="5" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    document.getElementById('health-due').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-review]');
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        await API.post('/admin/specs/' + encodeURIComponent(btn.dataset.review) + '/review', {});
+        UI.toast('已标记为复核', 'ok');
+        await loadHealth();
+      } catch (err) {
+        UI.toast(err.message, 'err');
+        btn.disabled = false;
+      }
+    });
+
     await loadList('');
+    await loadHealth();
   })();
 </script>
 </body>

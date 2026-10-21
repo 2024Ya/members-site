@@ -76,6 +76,11 @@
           '<h1>' + UI.escapeHtml(s.title) + '</h1>' +
           '<div class="spec-facts">' + facts.join('<span>·</span>') + '</div>' +
           (s.summary ? '<div class="spec-summary">' + UI.escapeHtml(s.summary) + '</div>' : '') +
+          (Specs.checkUrl(s.code)
+            ? '<div class="file-bar" style="margin-top:14px"><a class="btn btn-ghost btn-sm" href="' +
+              Specs.checkUrl(s.code) + '" target="_blank" rel="noopener">去' + Specs.checkName() + '查时效</a>' +
+              '<span class="small muted">核对是否仍为现行，再回来改状态</span></div>'
+            : '') +
           (s.published ? '' : '<div class="alert alert-info" style="margin-top:16px">这是草稿，只有管理员能看到</div>') +
         '</header>' +
         '<div class="spec-body">' +

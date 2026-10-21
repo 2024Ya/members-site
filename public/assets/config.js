@@ -5,4 +5,8 @@
 window.SITE = {
   name: '个人规范库',
   description: '水利行业规范集中查询，注册后可阅读全文与原始文件',
+  // 点「查时效」时打开的网址，{code} 会替换成规范编号
+  // 如果这个地址不对，改这里或直接清空（清空后按钮会隐藏）
+  checkUrl: 'https://www.csres.com/s.jsp?keyword={code}',
+  checkName: '工标网',
 };
