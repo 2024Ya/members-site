@@ -1,4 +1,4 @@
-// 前端公共工具：接口调用、导航渲染、提示条、登录态判断
+﻿// 前端公共工具：接口调用、导航渲染、提示条、登录态判断
 (function () {
   'use strict';
 
@@ -79,8 +79,8 @@
     document.querySelectorAll('[data-site-name]').forEach((el) => {
       el.textContent = site.name;
     });
-    if (document.title.indexOf('会员站') !== -1) {
-      document.title = document.title.replace('会员站', site.name);
+    if (document.title.indexOf('个人规范库') !== -1) {
+      document.title = document.title.replace('个人规范库', site.name);
     }
   }
 
