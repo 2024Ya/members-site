@@ -523,7 +523,17 @@
 
         setFiles([]);
         fileInput.value = '';
-        // ---------------- 用户管理 ----------------
+
+        await loadList('');
+      } catch (err) {
+        UI.toast(err.message, 'err');
+      } finally {
+        uploadBtn.disabled = false;
+        document.getElementById('bulk-progress').textContent = '';
+      }
+    });
+
+    // ---------------- 用户管理 ----------------
     let users = [];
 
     async function loadUsers() {
@@ -651,84 +661,6 @@
               '<td class="small muted">' + s.year + '（' + s.age + ' 年前）</td>' +
               '<td><a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">核对</a>' +
                 (check ? ' <a class="btn btn-ghost btn-sm" href="' + check + '" target="_blank" rel="noopener">查时效</a>' : '') + '</td>' +
-            '</tr>';
-          }).join('');
-        }
-      } catch (err) {
-        document.getElementById('health-due').innerHTML =
-          '<tr><td colspan="5" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
-      }
-    }
-
-    document.getElementById('health-due').addEventListener('click', async function (e) {
-      const btn = e.target.closest('button[data-review]');
-      if (!btn) return;
-      btn.disabled = true;
-      try {
-        await API.post('/admin/specs/' + encodeURIComponent(btn.dataset.review) + '/review', {});
-        UI.toast('已标记为复核', 'ok');
-        await loadHealth();
-      } catch (err) {
-        UI.toast(err.message, 'err');
-        btn.disabled = false;
-      }
-    });
-
-    await loadList('');
-    await loadHealth();
-      } catch (err) {
-        UI.toast(err.message, 'err');
-      } finally {
-        uploadBtn.disabled = false;
-        document.getElementById('bulk-progress').textContent = '';
-      }
-    });
-
-    // ---------------- 状态巡检 ----------------
-    async function loadHealth() {
-      try {
-        const data = await API.get('/admin/health');
-        document.getElementById('h-active').textContent = data.stats.active;
-        document.getElementById('h-replaced').textContent = data.stats.replaced;
-        document.getElementById('h-abolished').textContent = data.stats.abolished;
-        document.getElementById('h-due').textContent = data.due.length;
-
-        const badge = document.getElementById('health-badge');
-        if (data.due.length) {
-          badge.textContent = data.due.length;
-          badge.classList.remove('hidden');
-        } else {
-          badge.classList.add('hidden');
-        }
-
-        const dueBody = document.getElementById('health-due');
-        if (!data.due.length) {
-          dueBody.innerHTML = '<tr><td colspan="5" class="muted">没有到期待复核的规范</td></tr>';
-        } else {
-          dueBody.innerHTML = data.due.map(function (s) {
-            return '<tr>' +
-              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '<span class="muted">—</span>') + '</td>' +
-              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
-              '<td class="small muted">' + (s.reviewed_at ? UI.formatDate(s.reviewed_at) : '从未') + '</td>' +
-              '<td><span class="badge badge-danger">' + s.overdue_days + ' 天</span></td>' +
-              '<td>' +
-                '<button class="btn btn-primary btn-sm" data-review="' + s.id + '">已复核</button> ' +
-                '<a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">查看</a>' +
-              '</td>' +
-            '</tr>';
-          }).join('');
-        }
-
-        const susBody = document.getElementById('health-suspect');
-        if (!data.suspect.length) {
-          susBody.innerHTML = '<tr><td colspan="4" class="muted">没有疑似过时的规范</td></tr>';
-        } else {
-          susBody.innerHTML = data.suspect.map(function (s) {
-            return '<tr>' +
-              '<td class="small">' + (s.code ? '<span class="spec-code">' + UI.escapeHtml(s.code) + '</span>' : '—') + '</td>' +
-              '<td><strong>' + UI.escapeHtml(s.title) + '</strong></td>' +
-              '<td class="small muted">' + s.year + '（' + s.age + ' 年前）</td>' +
-              '<td><a class="btn btn-ghost btn-sm" href="/spec?id=' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener">核对</a></td>' +
             '</tr>';
           }).join('');
         }
