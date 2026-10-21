@@ -37,6 +37,7 @@
         <button class="tab" data-tab="health" type="button">
           状态巡检 <span class="badge badge-warn hidden" id="health-badge"></span>
         </button>
+        <button class="tab" data-tab="users" type="button">用户管理</button>
       </div>
 
       <section id="tab-list">
@@ -182,6 +183,27 @@
         </div>
       </section>
 
+      <section id="tab-users" class="hidden">
+        <div class="row" style="margin-bottom:16px">
+          <span class="small muted">新管理员需要先在首页注册，再回到这里点「设为管理员」</span>
+          <span class="spacer"></span>
+          <span class="small muted" id="user-count"></span>
+        </div>
+
+        <div class="card card-tight">
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr><th>邮箱</th><th>昵称</th><th>身份</th><th>状态</th><th>注册时间</th><th style="width:270px">操作</th></tr>
+              </thead>
+              <tbody id="user-rows">
+                <tr><td colspan="6" class="muted">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="tab-health" class="hidden">
         <div class="stats" style="margin-bottom:22px">
           <div class="stat"><div class="n" id="h-active">–</div><div class="l">现行</div></div>
@@ -259,7 +281,9 @@
         document.getElementById('tab-list').classList.toggle('hidden', tab.dataset.tab !== 'list');
         document.getElementById('tab-bulk').classList.toggle('hidden', tab.dataset.tab !== 'bulk');
         document.getElementById('tab-health').classList.toggle('hidden', tab.dataset.tab !== 'health');
+        document.getElementById('tab-users').classList.toggle('hidden', tab.dataset.tab !== 'users');
         if (tab.dataset.tab === 'health') loadHealth();
+        if (tab.dataset.tab === 'users') loadUsers();
       });
     });
 
@@ -499,7 +523,86 @@
 
         setFiles([]);
         fileInput.value = '';
-        // ---------------- 状态巡检 ----------------
+        // ---------------- 用户管理 ----------------
+    let users = [];
+
+    async function loadUsers() {
+      const tbody = document.getElementById('user-rows');
+      try {
+        const data = await API.get('/admin/users');
+        users = data.users || [];
+        document.getElementById('user-count').textContent = users.length + ' 位';
+
+        if (!users.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted">还没有用户</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = users.map(function (u) {
+          const isSelf = u.id === user.id;
+          const roleBadge = u.role === 'admin'
+            ? '<span class="badge badge-brand">管理员</span>'
+            : '<span class="badge">会员</span>';
+          const stateBadge = u.banned
+            ? '<span class="badge badge-danger">已停用</span>'
+            : '<span class="badge badge-ok">正常</span>';
+
+          return '<tr>' +
+            '<td class="small">' + UI.escapeHtml(u.email) + (isSelf ? ' <span class="muted">(你)</span>' : '') + '</td>' +
+            '<td class="small">' + UI.escapeHtml(u.name || '') + '</td>' +
+            '<td>' + roleBadge + '</td>' +
+            '<td>' + stateBadge + '</td>' +
+            '<td class="small muted">' + UI.formatDate(u.created_at) + '</td>' +
+            '<td>' +
+              '<button class="btn btn-ghost btn-sm" data-action="role" data-id="' + u.id + '"' + (isSelf ? ' disabled' : '') + '>' +
+                (u.role === 'admin' ? '取消管理员' : '设为管理员') + '</button> ' +
+              '<button class="btn btn-ghost btn-sm" data-action="ban" data-id="' + u.id + '"' + (isSelf ? ' disabled' : '') + '>' +
+                (u.banned ? '解封' : '停用') + '</button> ' +
+              '<button class="btn btn-ghost btn-sm" data-action="pwd" data-id="' + u.id + '">改密码</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">加载失败：' + UI.escapeHtml(err.message) + '</td></tr>';
+      }
+    }
+
+    document.getElementById('user-rows').addEventListener('click', async function (e) {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+
+      const target = users.find(function (u) { return u.id === btn.dataset.id; });
+      if (!target) return;
+
+      try {
+        if (btn.dataset.action === 'role') {
+          const next = target.role === 'admin' ? 'user' : 'admin';
+          if (!confirm('把 ' + target.email + ' 设为' + (next === 'admin' ? '管理员' : '普通会员') + '？')) return;
+          await API.patch('/admin/users/' + encodeURIComponent(target.id), { role: next });
+          UI.toast('已更新', 'ok');
+        }
+
+        if (btn.dataset.action === 'ban') {
+          if (!confirm((target.banned ? '解封 ' : '停用 ') + target.email + '？')) return;
+          await API.patch('/admin/users/' + encodeURIComponent(target.id), { banned: !target.banned });
+          UI.toast(target.banned ? '已解封' : '已停用', 'ok');
+        }
+
+        if (btn.dataset.action === 'pwd') {
+          const pwd = prompt('给 ' + target.email + ' 设置新密码（至少 8 位）：');
+          if (!pwd) return;
+          if (pwd.length < 8) return UI.toast('密码至少 8 位', 'err');
+          await API.patch('/admin/users/' + encodeURIComponent(target.id), { newPassword: pwd });
+          UI.toast('密码已重置，请把新密码告诉对方', 'ok');
+        }
+
+        await loadUsers();
+      } catch (err) {
+        UI.toast(err.message, 'err');
+      }
+    });
+
+    // ---------------- 状态巡检 ----------------
     async function loadHealth() {
       try {
         const data = await API.get('/admin/health');
